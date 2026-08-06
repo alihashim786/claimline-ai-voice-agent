@@ -1,0 +1,9 @@
+# Streamlit Community Cloud installs exactly this file on every deploy.
+# Lower bounds only (no ==) so the free tier can patch security fixes, but
+# each floor is a real requirement, not a guess:
+
+streamlit>=1.49.0        # width="stretch" API; older versions reject it
+pandas>=2.2.0            # DataFrame handling for the claims table
+plotly>=5.24.0           # marker.cornerradius on bar traces (added in 5.20)
+gspread>=6.1.2           # Google Sheets reads; 6.x is the current auth flow
+google-auth>=2.35.0      # service-account credentials for gspread

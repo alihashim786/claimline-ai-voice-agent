@@ -1,0 +1,26 @@
+# Secrets — the single most important line in this file.
+# .streamlit/secrets.toml holds a Google private key. Never commit it.
+.streamlit/secrets.toml
+*.json
+!n8n/*.json
+service-account*.json
+credentials*.json
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

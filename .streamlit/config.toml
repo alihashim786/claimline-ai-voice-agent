@@ -1,0 +1,17 @@
+# The dashboard commits to a single light look (dark hero band, light body).
+# Pinning the theme here stops Streamlit from serving a half-dark page to
+# visitors whose OS is in dark mode, which would leave the custom CSS colours
+# fighting Streamlit's own dark tokens.
+[theme]
+base                = "light"
+primaryColor        = "#2a78d6"
+backgroundColor     = "#f9f9f7"
+secondaryBackgroundColor = "#fcfcfb"
+textColor           = "#0b0b0b"
+font                = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
