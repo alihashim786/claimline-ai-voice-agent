@@ -335,7 +335,7 @@ preview link, which is a different thing — see 11c).
 | Field | Value | Why |
 |---|---|---|
 | Key Name | `ClaimLine-Streamlit-Widget` | A label for you |
-| Allowed Domains | your Streamlit domain, e.g. `claimline-ai.streamlit.app` | Restricts where the key works. Leave empty while developing, then lock it down after deploying. |
+| Allowed Domains | your deployed hostname, e.g. `claimline-ai.streamlit.app` — plus a second entry `localhost` | **Required — Retell will not save the key without at least one domain.** Bare hostname only: no `https://`, no trailing slash, no path. |
 | Abuse Prevention (reCAPTCHA) | **OFF** | Turning this on makes the key demand a reCAPTCHA token that the frontend must supply. `streamlit_app.py` does not send one, so the call button would fail authentication every time. |
 | Fraud Protection | OFF | IP-based request limiting. Fine off for a demo; on, it can flag your own repeated test calls. |
 
@@ -344,12 +344,24 @@ preview link, which is a different thing — see 11c).
 5. Put both values into Streamlit secrets (see
    `.streamlit/secrets.toml.example`).
 
-**On Allowed Domains.** The public key is visible in your page source by design,
-so an empty allowlist means anyone can copy it and embed your agent on their own
-site, spending your credits. Restricting it to your own domain closes that. The
-tradeoff is that a wrong entry blocks your own app with an opaque failure — so
-get the widget working with it empty, then add the domain once you know your
-deployed URL.
+**On Allowed Domains — this changes your build order.** The field is mandatory,
+so you cannot mint the key before you know where the app will live. Deploy the
+Streamlit app *first* (step D of the README setup guide), read the exact
+hostname off your browser's address bar, and only then create the key.
+
+That ordering works because `streamlit_app.py` is written to run without any
+Retell secrets — it deploys cleanly and shows a "Voice widget not configured"
+notice where the call button would be. So there is no chicken-and-egg problem,
+just a sequence.
+
+Why the field exists: the public key is visible in your page source by design,
+so without a domain allowlist anyone could copy it and embed your agent on their
+own site, spending your credits. The allowlist is what makes a browser-visible
+key safe.
+
+If the exact hostname does not authenticate, `*.streamlit.app` is a working
+fallback — weaker, since it trusts every app on Streamlit's shared domain, but
+far better than an open key. Try the exact hostname first.
 
 ### 11c. Bonus — the hosted preview link
 

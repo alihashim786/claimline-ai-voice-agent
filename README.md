@@ -107,10 +107,13 @@ Create the `ClaimLine-Data` spreadsheet with `Policies`, `Claims` and `Analytics
 Import both JSON files, set the Sheet ID in each workflow's `Config` node, attach Google Sheets + Gmail credentials, and **Publish**. Test all three branches with `curl` before Retell exists. Produces: **two production webhook URLs**.
 
 ### 3. Retell → [`docs/retell-setup-guide.md`](docs/retell-setup-guide.md)
-Upload the Knowledge Base, create a Conversation Flow agent, paste [`prompts/conductor-prompt.txt`](prompts/conductor-prompt.txt) into Conductor, wire the three function nodes to Workflow A's URL, configure Post-Call Data Extraction, point the `call_analyzed` webhook at Workflow B, and publish. Produces: a **public key** and **agent ID**.
+Upload the Knowledge Base, create a Conversation Flow agent, paste [`prompts/conductor-prompt.txt`](prompts/conductor-prompt.txt) into Conductor, wire the three function nodes to Workflow A's URL, configure Post-Call Data Extraction, point the `call_analyzed` webhook at Workflow B, and publish. Produces: the **agent ID**.
 
 ### 4. Streamlit → [`docs/streamlit-deployment.md`](docs/streamlit-deployment.md)
 Push to a public GitHub repo, deploy on Community Cloud, paste your secrets. Produces: the **public demo URL**.
+
+### 5. Back to Retell for the widget public key
+Minting a public key requires a non-empty **Allowed Domains** list, so it can only be done once you know your deployed hostname — hence the loop back. The dashboard is built to deploy and run *without* Retell secrets (it shows a "voice widget not configured" notice in place of the call button), so this ordering costs nothing. See step 11b of the Retell guide.
 
 ## How to test the voice agent
 
