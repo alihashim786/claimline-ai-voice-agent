@@ -41,7 +41,7 @@
         -900,
         340
       ],
-      "notes": "EDIT ME: paste the ID of your ClaimLine-Data Google Sheet here. Every Google Sheets node in this workflow reads it from this one node."
+      "notes": "EDIT ME: paste EITHER the bare Sheet ID (1AbC...) OR the full https://docs.google.com/spreadsheets/d/.../edit URL - the Google Sheets nodes extract the ID from whichever you give them."
     },
     {
       "parameters": {
@@ -153,7 +153,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Config').first().json.sheet_id }}",
+          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
           "mode": "id"
         },
         "sheetName": {
@@ -228,7 +228,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Config').first().json.sheet_id }}",
+          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
           "mode": "id"
         },
         "sheetName": {
@@ -389,7 +389,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Config').first().json.sheet_id }}",
+          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
           "mode": "id"
         },
         "sheetName": {

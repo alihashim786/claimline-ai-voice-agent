@@ -14,7 +14,10 @@
       "name": "Webhook (call_analyzed)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-1080, 400],
+      "position": [
+        -1080,
+        400
+      ],
       "webhookId": "claimline-post-call-webhook",
       "notes": "Response Mode is 'Immediately'. Retell only needs a 200 to know the event was delivered; making it wait for Gmail would risk Retell retrying and sending duplicate emails."
     },
@@ -43,8 +46,11 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [-860, 400],
-      "notes": "EDIT ME: same Google Sheet ID as Workflow A."
+      "position": [
+        -860,
+        400
+      ],
+      "notes": "EDIT ME: paste EITHER the bare Sheet ID (1AbC...) OR the full https://docs.google.com/spreadsheets/d/.../edit URL - the Google Sheets nodes extract the ID from whichever you give them."
     },
     {
       "parameters": {
@@ -54,7 +60,10 @@
       "name": "Flatten Retell Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-640, 400]
+      "position": [
+        -640,
+        400
+      ]
     },
     {
       "parameters": {
@@ -86,7 +95,10 @@
       "name": "IF claim_filed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [-400, 400]
+      "position": [
+        -400,
+        400
+      ]
     },
     {
       "parameters": {
@@ -103,7 +115,10 @@
       "name": "Gmail — Send Confirmation",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [-140, 260],
+      "position": [
+        -140,
+        260
+      ],
       "onError": "continueRegularOutput",
       "notes": "On Error is set to 'Continue' so a bad/missing caller email cannot stop the analytics row from being logged. The dashboard should still show the call even if the email bounced."
     },
@@ -112,7 +127,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Config').first().json.sheet_id }}",
+          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
           "mode": "id"
         },
         "sheetName": {
@@ -130,10 +145,42 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "timestamp", "displayName": "timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "claim_filed", "displayName": "claim_filed", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "urgency", "displayName": "urgency", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "incident_type", "displayName": "incident_type", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "claim_filed",
+              "displayName": "claim_filed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "incident_type",
+              "displayName": "incident_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
           ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": true
@@ -144,7 +191,10 @@
       "name": "Analytics — Log Claim Filed",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [120, 260],
+      "position": [
+        120,
+        260
+      ],
       "notes": "Reads from the Flatten node by name rather than from $json, because the Gmail node upstream replaces $json with Gmail's own API response."
     },
     {
@@ -152,7 +202,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{ $('Config').first().json.sheet_id }}",
+          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
           "mode": "id"
         },
         "sheetName": {
@@ -170,10 +220,42 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "timestamp", "displayName": "timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "claim_filed", "displayName": "claim_filed", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "urgency", "displayName": "urgency", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "incident_type", "displayName": "incident_type", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "claim_filed",
+              "displayName": "claim_filed",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "incident_type",
+              "displayName": "incident_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
           ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": true
@@ -184,28 +266,75 @@
       "name": "Analytics — Log No Claim",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [-140, 560],
+      "position": [
+        -140,
+        560
+      ],
       "notes": "Logging the calls where nothing was filed is what makes the dashboard's volume chart meaningful -- without it you can only see successes and have no idea what the conversion rate is."
     }
   ],
   "connections": {
     "Webhook (call_analyzed)": {
-      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config": {
-      "main": [[{ "node": "Flatten Retell Payload", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Flatten Retell Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Flatten Retell Payload": {
-      "main": [[{ "node": "IF claim_filed", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "IF claim_filed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IF claim_filed": {
       "main": [
-        [{ "node": "Gmail — Send Confirmation", "type": "main", "index": 0 }],
-        [{ "node": "Analytics — Log No Claim", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Gmail — Send Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Analytics — Log No Claim",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Gmail — Send Confirmation": {
-      "main": [[{ "node": "Analytics — Log Claim Filed", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Analytics — Log Claim Filed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
