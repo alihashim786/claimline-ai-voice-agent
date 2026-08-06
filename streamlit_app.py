@@ -627,14 +627,39 @@ def main() -> None:
     agent_id = secret("retell", "agent_id")
     agent_version = secret("retell", "agent_version")
 
-    if public_key and agent_id:
+    # Validate the SHAPE of the credentials, not just their presence.
+    # A leftover placeholder like "PASTE_PUBLIC_KEY_HERE" is a non-empty
+    # string, so a truthiness check happily renders the widget with a junk
+    # key -- the call button appears and then silently fails to connect,
+    # which is far harder to diagnose than no button at all.
+    key_ok = public_key.startswith("public_key_")
+    agent_ok = agent_id.startswith("agent_")
+
+    if key_ok and agent_ok:
         render_retell_widget(public_key, agent_id, agent_version)
     else:
+        problems = []
+        if not public_key:
+            problems.append("<code>retell.public_key</code> is missing")
+        elif not key_ok:
+            problems.append(
+                "<code>retell.public_key</code> does not start with "
+                "<code>public_key_</code> — it is still a placeholder, or the "
+                "private API key was pasted by mistake"
+            )
+        if not agent_id:
+            problems.append("<code>retell.agent_id</code> is missing")
+        elif not agent_ok:
+            problems.append(
+                "<code>retell.agent_id</code> does not start with <code>agent_</code>"
+            )
+
         st.markdown(
-            '<div class="cl-note"><b>Voice widget not configured.</b> Add '
-            '<code>retell.public_key</code> and <code>retell.agent_id</code> to '
-            '<code>.streamlit/secrets.toml</code> (locally) or to the app\'s Secrets '
-            'in Streamlit Community Cloud to enable the call button.</div>',
+            '<div class="cl-note"><b>Voice widget not configured.</b><ul style="margin:.5rem 0 .4rem 1rem;">'
+            + "".join(f"<li>{p}</li>" for p in problems)
+            + "</ul>Set these in <code>.streamlit/secrets.toml</code> locally, or in "
+            "<b>Settings → Secrets</b> on Streamlit Community Cloud (editing the local "
+            "file does not update the deployed app).</div>",
             unsafe_allow_html=True,
         )
 
