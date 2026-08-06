@@ -157,7 +157,6 @@ Use Retell's Playground (text mode is cheaper and shows every function call with
 
 ## Screenshots
 
-_Add yours to `screenshots/` and link them here._
 
 ## Notes and learnings
 
