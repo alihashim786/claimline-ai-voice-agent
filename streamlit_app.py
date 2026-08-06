@@ -197,6 +197,23 @@ def inject_css() -> None:
           .cl-tile-value.is-critical {{ color: {STATUS_CRITICAL}; }}
 
           /* ---- misc ------------------------------------------------- */
+          /* ---- chart cards ------------------------------------------ */
+          /* The chart itself is the card. An HTML wrapper div cannot work
+             here: Streamlit renders each element as a sibling, so a <div>
+             opened in st.markdown is closed before st.plotly_chart runs and
+             you get an empty box with the chart floating underneath it. */
+          .cl-chart-head {{ margin: 0 0 .5rem; }}
+          .cl-chart-head .t {{ font-weight: 700; font-size: .95rem; color: {INK}; }}
+          .cl-chart-head .s {{ font-size: .82rem; color: {INK_MUTED}; margin-top: .1rem; }}
+          div[data-testid="stPlotlyChart"] {{
+            background: {SURFACE};
+            border: 1px solid rgba(11,11,11,.10);
+            border-radius: 14px;
+            padding: .9rem 1rem;
+            box-shadow: 0 1px 2px rgba(11,11,11,.04);
+            overflow: hidden;
+          }}
+
           .cl-note {{
             font-size: .83rem; color: {INK_SOFT}; line-height: 1.6;
             background: #fffbeb; border: 1px solid #fde68a;
@@ -476,6 +493,10 @@ def chart_by_type(df: pd.DataFrame) -> go.Figure:
             # says what is being counted. Colouring each bar differently would
             # imply a second variable that does not exist.
             marker=dict(color=SERIES_BLUE, cornerradius=4),
+            # Pin bar thickness in category units. Without this, one category
+            # stretches into a slab that fills the whole plot area and reads as
+            # a coloured rectangle rather than a bar.
+            width=0.55,
             text=counts.values,
             textposition="outside",
             textfont=dict(color=INK_SOFT, size=12),
@@ -490,7 +511,9 @@ def chart_by_type(df: pd.DataFrame) -> go.Figure:
     fig.update_yaxes(
         showgrid=False, showline=False, tickfont=dict(color=INK_SOFT, size=12), title=None,
     )
-    return base_layout(fig)
+    # Grow with the number of categories so bar thickness stays constant
+    # instead of the chart stretching whatever bars it has to fill 320px.
+    return base_layout(fig, height=max(180, 58 * max(len(counts), 1) + 70))
 
 
 def chart_urgency(df: pd.DataFrame) -> go.Figure:
@@ -694,34 +717,29 @@ def main() -> None:
 
     # ---- charts ----------------------------------------------------------
     st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+
+    def chart_block(title: str, subtitle: str, fig: go.Figure) -> None:
+        st.markdown(
+            f'<div class="cl-chart-head"><div class="t">{title}</div>'
+            f'<div class="s">{subtitle}</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
+
     c1, c2 = st.columns([3, 2])
     with c1:
-        st.markdown(
-            '<div class="cl-card"><div style="font-weight:700;font-size:.95rem;'
-            'margin-bottom:.2rem;">Claims by incident type</div>'
-            f'<div style="font-size:.82rem;color:{INK_MUTED};margin-bottom:.6rem;">'
-            'Where the claim volume actually comes from</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.plotly_chart(chart_by_type(df), width="stretch", config=PLOTLY_CONFIG)
+        chart_block("Claims by incident type",
+                    "Where the claim volume actually comes from",
+                    chart_by_type(df))
     with c2:
-        st.markdown(
-            '<div class="cl-card"><div style="font-weight:700;font-size:.95rem;'
-            'margin-bottom:.2rem;">Urgency split</div>'
-            f'<div style="font-size:.82rem;color:{INK_MUTED};margin-bottom:.6rem;">'
-            'Urgent claims are reviewed in 24–48h</div></div>',
-            unsafe_allow_html=True,
-        )
-        st.plotly_chart(chart_urgency(df), width="stretch", config=PLOTLY_CONFIG)
+        chart_block("Urgency split",
+                    "Urgent claims are reviewed in 24–48h",
+                    chart_urgency(df))
 
-    st.markdown(
-        '<div class="cl-card" style="margin-top:1rem;"><div style="font-weight:700;'
-        'font-size:.95rem;margin-bottom:.2rem;">Claims filed over time</div>'
-        f'<div style="font-size:.82rem;color:{INK_MUTED};margin-bottom:.6rem;">'
-        'Daily volume, by the timestamp the agent wrote</div></div>',
-        unsafe_allow_html=True,
-    )
-    st.plotly_chart(chart_over_time(df), width="stretch", config=PLOTLY_CONFIG)
+    st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
+    chart_block("Claims filed over time",
+                "Daily volume, by the timestamp the agent wrote",
+                chart_over_time(df))
 
     # ---- table + lookup --------------------------------------------------
     section(
