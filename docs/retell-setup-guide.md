@@ -315,18 +315,64 @@ the old thing" is nearly always an unpublished draft.
 
 ## Step 11 — Get the widget credentials for the dashboard
 
-1. In the agent, find **Website Widget** / **Embed** / **Share**.
-2. Copy two values:
-   - **Public key** — starts with `public_key_`
-   - **Agent ID** — starts with `agent_`
-3. Put them into Streamlit secrets (see `.streamlit/secrets.toml.example`).
+You need two values: the **agent ID** and a **public key**. The agent ID already
+exists; the public key you have to create.
 
-**Public key vs API key — get this right.** The *public* key is designed to be
-visible in page source; it can only start a web call with the agent you name and
-nothing else. That's why the dashboard needs no backend token server. Your
-Retell **private API key** (under Settings → API Keys) can create agents, read
-every transcript and spend your credits — it must never appear in this repo, in
-Streamlit secrets, or in any client-side code.
+### 11a. Agent ID
+On the agent page, click the **ID** control next to *Agent details* (bottom-left
+of the canvas) and copy it. It starts with `agent_`.
+
+### 11b. Public key — you MINT this, it does not already exist
+
+This is account-level, not per-agent, so it is **not** on the agent page and
+**not** behind the agent's *Share* button (Share gives you a hosted voice-orb /
+preview link, which is a different thing — see 11c).
+
+1. Go to **Settings → API Keys**.
+2. Select the **Public Keys** tab (next to *API Keys*).
+3. **+ Add Key**, and fill the dialog in:
+
+| Field | Value | Why |
+|---|---|---|
+| Key Name | `ClaimLine-Streamlit-Widget` | A label for you |
+| Allowed Domains | your Streamlit domain, e.g. `claimline-ai.streamlit.app` | Restricts where the key works. Leave empty while developing, then lock it down after deploying. |
+| Abuse Prevention (reCAPTCHA) | **OFF** | Turning this on makes the key demand a reCAPTCHA token that the frontend must supply. `streamlit_app.py` does not send one, so the call button would fail authentication every time. |
+| Fraud Protection | OFF | IP-based request limiting. Fine off for a demo; on, it can flag your own repeated test calls. |
+
+4. **Save**, then copy the value from the **Key Value** column. It starts with
+   `public_key_`.
+5. Put both values into Streamlit secrets (see
+   `.streamlit/secrets.toml.example`).
+
+**On Allowed Domains.** The public key is visible in your page source by design,
+so an empty allowlist means anyone can copy it and embed your agent on their own
+site, spending your credits. Restricting it to your own domain closes that. The
+tradeoff is that a wrong entry blocks your own app with an opaque failure — so
+get the widget working with it empty, then add the domain once you know your
+deployed URL.
+
+### 11c. Bonus — the hosted preview link
+
+The agent's **Share** button offers a *Voice Orb* shareable link and a *Preview
+link* once **Public access** is toggled on:
+
+```
+https://agent.retellai.com/preview/<your-agent-id>
+```
+
+That is a working, no-code public demo you can share immediately — useful as a
+backup link in your README if the Streamlit app hibernates. It does not replace
+the widget (it is Retell-hosted, not embedded in your dashboard), but it is free
+and it works before anything else is deployed.
+
+### Public key vs private API key — get this right
+
+The *public* key is designed to be visible in page source; it can only start a
+web call with the agent you name and nothing else. That is why the dashboard
+needs no backend token server. Your Retell **private API key** (the `key_…` one,
+on the *API Keys* tab) can create agents, read every transcript and spend your
+credits — it must never appear in this repo, in Streamlit secrets, or in any
+client-side code.
 
 ---
 

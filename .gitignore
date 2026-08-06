@@ -24,3 +24,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Local copies with the real Sheet ID baked in (generated, not for the public repo)
+n8n/local/
