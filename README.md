@@ -2,7 +2,9 @@
 
 A voice AI claims assistant for a (fictional) general insurer, built as a hands-on learning project for **Retell AI** (voice agent platform), **n8n** (workflow automation) and **Streamlit** (public dashboard). A caller can ask policy questions answered from an uploaded knowledge base, file a brand new claim — validated against a live policy database, triaged for urgency, and written straight to a Google Sheet — or check the status of an existing claim by ID. All in one natural conversation, with no manual data entry on the business side.
 
-**🔗 Live demo:** _[deployed Streamlit URL goes here]_ — the voice agent is embedded on the page; you can call it from your browser.
+**🔗 Live demo: [claimline-ai.streamlit.app](https://claimline-ai.streamlit.app/)** — the voice agent is embedded on the page; click the call button and talk to it from your browser.
+
+**Backup link:** [talk to the agent directly](https://agent.retellai.com/preview/agent_03adaf0e566cf8b6ac0230bc85) (Retell-hosted, no dashboard) — useful if the Streamlit app has hibernated, since the free tier sleeps after ~7 days idle.
 
 > ⚠️ **Demonstration project — no real data.** ClaimLine Insurance is fictional. Every policy, claim, name and email address is seeded demo data. Do not enter real personal, medical or insurance information into the agent.
 
