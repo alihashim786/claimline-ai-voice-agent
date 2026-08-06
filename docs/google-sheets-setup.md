@@ -62,10 +62,14 @@ logged out, and it can be revoked without touching your own account.
 
 1. Go to **https://console.cloud.google.com** and create a project (any name,
    e.g. `claimline-ai`). No billing card is needed for this.
-2. **APIs & Services → Library** → enable **Google Sheets API**.
-3. Same Library → enable **Google Drive API**.
-   *(gspread opens sheets through Drive metadata; skipping this gives a
-   confusing `SpreadsheetNotFound` even when the ID is correct.)*
+2. **APIs & Services → Library** → enable **Google Sheets API**. This one is
+   required.
+3. Same Library → **Google Drive API** is *optional* for this app. `gspread`'s
+   `open_by_key()` — which is what `streamlit_app.py` uses — calls the Sheets
+   API directly and never touches Drive, so the dashboard works fine with Drive
+   disabled. You only need it if you switch to opening sheets by *name*
+   (`gc.open("ClaimLine-Data")`) or listing files, both of which go through
+   Drive and will 403 without it. Enabling it costs nothing if you're unsure.
 4. **APIs & Services → Credentials → Create Credentials → Service account**.
    - Name: `claimline-dashboard`
    - Skip the optional role/user grants — **do not** give it a project role. It
@@ -126,7 +130,7 @@ Console work needed on this side.
 - [ ] Spreadsheet named `ClaimLine-Data` with tabs `Policies`, `Claims`, `Analytics`
 - [ ] All three CSVs imported, headers untouched
 - [ ] Spreadsheet ID copied
-- [ ] Sheets API **and** Drive API enabled
+- [ ] Google **Sheets API** enabled (Drive API optional — see step 4.3)
 - [ ] Service account JSON key downloaded (and never committed)
 - [ ] Sheet **shared** with the service account's `client_email` as Viewer
 - [ ] n8n Google Sheets OAuth credential created and selected in all five nodes

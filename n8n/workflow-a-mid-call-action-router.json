@@ -12,7 +12,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-1120, 340],
+      "position": [
+        -1120,
+        340
+      ],
       "webhookId": "claimline-action-webhook"
     },
     {
@@ -34,7 +37,10 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [-900, 340],
+      "position": [
+        -900,
+        340
+      ],
       "notes": "EDIT ME: paste the ID of your ClaimLine-Data Google Sheet here. Every Google Sheets node in this workflow reads it from this one node."
     },
     {
@@ -45,7 +51,10 @@
       "name": "Normalize Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-680, 340]
+      "position": [
+        -680,
+        340
+      ]
     },
     {
       "parameters": {
@@ -135,7 +144,10 @@
       "name": "Route by Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [-440, 340]
+      "position": [
+        -440,
+        340
+      ]
     },
     {
       "parameters": {
@@ -163,19 +175,25 @@
       "name": "Lookup Policy",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [-160, 40],
+      "position": [
+        -160,
+        40
+      ],
       "alwaysOutputData": true,
       "notes": "Always Output Data is ON. Without it, a policy number that matches nothing returns zero items, the branch stops dead, no Respond node ever fires, and the caller sits in silence until Retell times out."
     },
     {
       "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// Shape the validate_policy answer for the voice agent.\n//\n// Three possible outcomes, all returned as HTTP 200 so Retell always\n// gets something it can speak. Errors are expressed in the payload,\n// never as an HTTP error code -- a 4xx/5xx would make the agent say\n// \"something went wrong\" instead of \"I couldn't find that policy\".\n// ---------------------------------------------------------------\n\nconst asked = $('Normalize Request').first().json;\nconst row = $json || {};\nconst found = Boolean(row.policy_number);\n\nif (!found) {\n  return [\n    {\n      json: {\n        valid: false,\n        reason: 'not_found',\n        policy_number: asked.policy_number,\n        message: `No policy found matching ${asked.policy_number}.`\n      }\n    }\n  ];\n}\n\n// Expiry check: a policy that exists but has lapsed is not a valid\n// policy to file a claim against, and the agent should say so plainly.\nconst validUntil = String(row.valid_until || '').trim();\nconst expiryDate = validUntil ? new Date(`${validUntil}T23:59:59Z`) : null;\nconst expired = expiryDate && !isNaN(expiryDate) && expiryDate < new Date();\n\nif (expired) {\n  return [\n    {\n      json: {\n        valid: false,\n        reason: 'expired',\n        policy_number: row.policy_number,\n        holder_name: row.holder_name,\n        coverage_type: row.coverage_type,\n        valid_until: validUntil,\n        message: `Policy ${row.policy_number} expired on ${validUntil}.`\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      valid: true,\n      reason: 'ok',\n      policy_number: row.policy_number,\n      holder_name: row.holder_name,\n      coverage_type: row.coverage_type,\n      valid_until: validUntil,\n      message: `Policy ${row.policy_number} is active and held by ${row.holder_name}.`\n    }\n  }\n];"
+        "jsCode": "// ---------------------------------------------------------------\n// Shape the validate_policy answer for the voice agent.\n//\n// Three possible outcomes, all returned as HTTP 200 so Retell always\n// gets something it can speak. Errors are expressed in the payload,\n// never as an HTTP error code -- a 4xx/5xx would make the agent say\n// \"something went wrong\" instead of \"I couldn't find that policy\".\n// ---------------------------------------------------------------\n\nconst asked = $('Normalize Request').first().json;\nconst row = $json || {};\nconst found = Boolean(row.policy_number);\n\nif (!found) {\n  return [\n    {\n      json: {\n        valid: false,\n        result: 'not_found',\n        reason: 'not_found',\n        policy_number: asked.policy_number,\n        message: `No policy found matching ${asked.policy_number}.`\n      }\n    }\n  ];\n}\n\n// Expiry check: a policy that exists but has lapsed is not a valid\n// policy to file a claim against, and the agent should say so plainly.\nconst validUntil = String(row.valid_until || '').trim();\nconst expiryDate = validUntil ? new Date(`${validUntil}T23:59:59Z`) : null;\nconst expired = expiryDate && !isNaN(expiryDate) && expiryDate < new Date();\n\nif (expired) {\n  return [\n    {\n      json: {\n        valid: false,\n        result: 'expired',\n        reason: 'expired',\n        policy_number: row.policy_number,\n        holder_name: row.holder_name,\n        coverage_type: row.coverage_type,\n        valid_until: validUntil,\n        message: `Policy ${row.policy_number} expired on ${validUntil}.`\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      valid: true,\n      result: 'valid',\n      reason: 'ok',\n      policy_number: row.policy_number,\n      holder_name: row.holder_name,\n      coverage_type: row.coverage_type,\n      valid_until: validUntil,\n      message: `Policy ${row.policy_number} is active and held by ${row.holder_name}.`\n    }\n  }\n];"
       },
       "id": "a1000000-0000-4000-8000-000000000006",
       "name": "Build Validate Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [60, 40]
+      "position": [
+        60,
+        40
+      ]
     },
     {
       "parameters": {
@@ -187,7 +205,10 @@
       "name": "Respond — Policy Validation",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [280, 40]
+      "position": [
+        280,
+        40
+      ]
     },
     {
       "parameters": {
@@ -197,7 +218,10 @@
       "name": "Generate Claim ID & Triage",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-160, 340]
+      "position": [
+        -160,
+        340
+      ]
     },
     {
       "parameters": {
@@ -228,16 +252,96 @@
           },
           "matchingColumns": [],
           "schema": [
-            { "id": "claim_id", "displayName": "claim_id", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "policy_number", "displayName": "policy_number", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "holder_name", "displayName": "holder_name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "incident_type", "displayName": "incident_type", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "incident_date", "displayName": "incident_date", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "description", "displayName": "description", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "urgency", "displayName": "urgency", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "status", "displayName": "status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "email", "displayName": "email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "created_at", "displayName": "created_at", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+            {
+              "id": "claim_id",
+              "displayName": "claim_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "policy_number",
+              "displayName": "policy_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "holder_name",
+              "displayName": "holder_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "incident_type",
+              "displayName": "incident_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "incident_date",
+              "displayName": "incident_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "urgency",
+              "displayName": "urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
           ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": true
@@ -248,17 +352,23 @@
       "name": "Append Claim Row",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [60, 340]
+      "position": [
+        60,
+        340
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Return only what the agent needs to speak. The caller does not need\n// to hear the row index or the keyword list, and every extra field is\n// another thing the model can decide to read out loud.\nconst c = $('Generate Claim ID & Triage').first().json;\n\nreturn [\n  {\n    json: {\n      success: true,\n      claim_id: c.claim_id,\n      urgency: c.urgency,\n      status: c.status,\n      holder_name: c.holder_name,\n      incident_type: c.incident_type,\n      message:\n        c.urgency === 'Urgent'\n          ? `Claim ${c.claim_id} has been filed and flagged as urgent for priority review within 24 to 48 hours.`\n          : `Claim ${c.claim_id} has been filed and will be reviewed within 5 to 7 business days.`\n    }\n  }\n];"
+        "jsCode": "// Return only what the agent needs to speak. The caller does not need\n// to hear the row index or the keyword list, and every extra field is\n// another thing the model can decide to read out loud.\nconst c = $('Generate Claim ID & Triage').first().json;\n\nreturn [\n  {\n    json: {\n      success: true,\n      result: c.urgency === 'Urgent' ? 'urgent' : 'standard',\n      claim_id: c.claim_id,\n      urgency: c.urgency,\n      status: c.status,\n      holder_name: c.holder_name,\n      incident_type: c.incident_type,\n      message:\n        c.urgency === 'Urgent'\n          ? `Claim ${c.claim_id} has been filed and flagged as urgent for priority review within 24 to 48 hours.`\n          : `Claim ${c.claim_id} has been filed and will be reviewed within 5 to 7 business days.`\n    }\n  }\n];"
       },
       "id": "a1000000-0000-4000-8000-00000000000a",
       "name": "Build Claim Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [280, 340]
+      "position": [
+        280,
+        340
+      ]
     },
     {
       "parameters": {
@@ -270,7 +380,10 @@
       "name": "Respond — Claim Created",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [500, 340]
+      "position": [
+        500,
+        340
+      ]
     },
     {
       "parameters": {
@@ -298,19 +411,25 @@
       "name": "Lookup Claim",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [-160, 640],
+      "position": [
+        -160,
+        640
+      ],
       "alwaysOutputData": true,
       "notes": "Always Output Data is ON so a fake claim ID still produces one (empty) item and the not-found response can be built and returned."
     },
     {
       "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// Shape the check_status answer.\n//\n// `found: false` is a normal, expected outcome, not an error --\n// the conversation flow branches on it to offer a retry or a handoff.\n// ---------------------------------------------------------------\n\nconst asked = $('Normalize Request').first().json;\nconst row = $json || {};\n\nif (!row.claim_id) {\n  return [\n    {\n      json: {\n        found: false,\n        claim_id: asked.claim_id,\n        message: `No claim found with ID ${asked.claim_id}.`\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      found: true,\n      claim_id: row.claim_id,\n      status: row.status,\n      incident_type: row.incident_type,\n      urgency: row.urgency,\n      holder_name: row.holder_name,\n      incident_date: row.incident_date,\n      created_at: row.created_at,\n      message: `Claim ${row.claim_id} for a ${row.incident_type} incident is currently ${row.status}.`\n    }\n  }\n];"
+        "jsCode": "// ---------------------------------------------------------------\n// Shape the check_status answer.\n//\n// `found: false` is a normal, expected outcome, not an error --\n// the conversation flow branches on it to offer a retry or a handoff.\n// ---------------------------------------------------------------\n\nconst asked = $('Normalize Request').first().json;\nconst row = $json || {};\n\nif (!row.claim_id) {\n  return [\n    {\n      json: {\n        found: false,\n        result: 'not_found',\n        claim_id: asked.claim_id,\n        message: `No claim found with ID ${asked.claim_id}.`\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      found: true,\n      result: 'found',\n      claim_id: row.claim_id,\n      status: row.status,\n      incident_type: row.incident_type,\n      urgency: row.urgency,\n      holder_name: row.holder_name,\n      incident_date: row.incident_date,\n      created_at: row.created_at,\n      message: `Claim ${row.claim_id} for a ${row.incident_type} incident is currently ${row.status}.`\n    }\n  }\n];"
       },
       "id": "a1000000-0000-4000-8000-00000000000d",
       "name": "Build Status Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [60, 640]
+      "position": [
+        60,
+        640
+      ]
     },
     {
       "parameters": {
@@ -322,7 +441,10 @@
       "name": "Respond — Claim Status",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [280, 640]
+      "position": [
+        280,
+        640
+      ]
     },
     {
       "parameters": {
@@ -334,48 +456,155 @@
       "name": "Respond — Unknown Action",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [60, 920],
+      "position": [
+        60,
+        920
+      ],
       "notes": "Safety net. A typo in the Retell function's `action` value would otherwise leave the branch with nowhere to go and the caller in dead air."
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config": {
-      "main": [[{ "node": "Normalize Request", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Normalize Request": {
-      "main": [[{ "node": "Route by Action", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Route by Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Route by Action": {
       "main": [
-        [{ "node": "Lookup Policy", "type": "main", "index": 0 }],
-        [{ "node": "Generate Claim ID & Triage", "type": "main", "index": 0 }],
-        [{ "node": "Lookup Claim", "type": "main", "index": 0 }],
-        [{ "node": "Respond — Unknown Action", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Lookup Policy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Claim ID & Triage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lookup Claim",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond — Unknown Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lookup Policy": {
-      "main": [[{ "node": "Build Validate Response", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Validate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Validate Response": {
-      "main": [[{ "node": "Respond — Policy Validation", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond — Policy Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Generate Claim ID & Triage": {
-      "main": [[{ "node": "Append Claim Row", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Append Claim Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Append Claim Row": {
-      "main": [[{ "node": "Build Claim Response", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Claim Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Claim Response": {
-      "main": [[{ "node": "Respond — Claim Created", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond — Claim Created",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lookup Claim": {
-      "main": [[{ "node": "Build Status Response", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Status Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Status Response": {
-      "main": [[{ "node": "Respond — Claim Status", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Respond — Claim Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {

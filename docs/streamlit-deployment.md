@@ -106,7 +106,7 @@ Replace the placeholder in `README.md` with your real app URL and push.
 | `ModuleNotFoundError` on boot | Package missing from `requirements.txt` | Add it, push; Cloud rebuilds automatically |
 | Still shows "sample data" after adding secrets | TOML typo, or sheet not shared | Check the app **Logs**; the most likely cause is the sheet not being shared with the service account's `client_email` |
 | `Could not deserialize key data` | `private_key` newlines were expanded | Must be a single line with literal `\n`, in triple quotes |
-| `SpreadsheetNotFound` | Drive API not enabled, or wrong ID | Enable Drive API; re-copy the ID from the sheet URL |
+| `SpreadsheetNotFound` | Wrong Spreadsheet ID | Re-copy it from the sheet URL, between `/d/` and `/edit`. (Drive API is *not* required — `open_by_key` uses the Sheets API only.) |
 | `APIError 403` | Sheet not shared with the service account | Share → paste `client_email` → Viewer |
 | Call button missing | Retell secrets absent, or key/agent-id swapped | `public_key` starts `public_key_`, `agent_id` starts `agent_` |
 | Call button appears, nothing happens on click | Microphone blocked | Must be HTTPS (Cloud is) and permission granted; check site permissions in the address bar |
