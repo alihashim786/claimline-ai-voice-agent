@@ -290,29 +290,45 @@ def secret(section_name: str, key: str, default: str = "") -> str:
 def render_retell_widget(public_key: str, agent_id: str, agent_version: str = "") -> None:
     """Embed the Retell website widget.
 
-    Two things make this trickier than dropping in a <script> tag:
+    Harder than dropping in a <script> tag, because of where the script ends up.
 
-    1. `st.components.v1.html` renders inside an iframe. Microphone access has
-       to be explicitly delegated to that iframe or the browser blocks
-       getUserMedia and the call button does nothing.
-    2. A floating call button positioned `fixed` inside a 200px-tall iframe is
-       clipped by the iframe, not by the page — the button ends up invisible.
+    The widget renders a `position: fixed` call button and needs getUserMedia
+    for the microphone. Both of those care about which document the script runs
+    in:
 
-    So the primary path injects the widget script into the *parent* document
-    (the real page) and lets it float over the whole app. Streamlit builds
-    component iframes with `srcdoc`, which inherits the parent's origin, so
-    this cross-frame access is permitted. If a future Streamlit release
-    tightens that, the `catch` re-injects the widget inside the iframe, which
-    still works — it just sits inline instead of floating.
+    * Inside an iframe, a fixed-position button is clipped by the *iframe*, not
+      the page — in a 44px-tall frame it is simply invisible.
+    * Microphone access has to be explicitly delegated to an iframe, or the
+      browser blocks the call before it starts.
+
+    So we want the script in the top-level document. Two ways to get there,
+    tried in order:
+
+    1. `st.html(..., unsafe_allow_javascript=True)` — renders into the real page,
+       no iframe at all. This is the right answer, and it is also the supported
+       one: `st.components.v1.html` is deprecated with a removal date that has
+       already passed.
+    2. `st.components.v1.html` — iframed, so the bootstrap below hops to
+       `window.parent.document`. Streamlit builds component iframes with
+       `srcdoc`, which inherits the parent origin, so that access is permitted.
+
+    The same bootstrap script serves both: under `st.html` there is no iframe,
+    so `window.parent === window` and the hop is a no-op.
+
+    Set `retell.embed_mode` in secrets to "html" or "iframe" to force one path
+    if the automatic choice ever misbehaves in a browser.
 
     The public key is safe to expose in page source; that is the entire point
     of Retell's public-key flow (no backend token server needed). Never put a
     Retell *private* API key anywhere in this file.
     """
-    version_attr = f'd.setAttribute("data-agent-version", {json.dumps(agent_version)});' if agent_version else ""
+    version_attr = (
+        f'd.setAttribute("data-agent-version", {json.dumps(agent_version)});'
+        if agent_version
+        else ""
+    )
 
-    components.html(
-        f"""
+    bootstrap = f"""
         <script>
         (function () {{
           function build(doc) {{
@@ -333,21 +349,34 @@ def render_retell_widget(public_key: str, agent_id: str, agent_version: str = ""
             doc.body.appendChild(d);
             return true;
           }}
-          try {{
-            build(window.parent.document);
-          }} catch (e) {{
-            build(document);
-          }}
+          try {{ build(window.parent.document); }} catch (e) {{ build(document); }}
         }})();
         </script>
-        <div style="font-family:{FONT_STACK};font-size:.86rem;color:{INK_SOFT};
+    """
+
+    mode = secret("retell", "embed_mode", "auto").lower()
+    used_html = False
+    if mode in ("auto", "html"):
+        try:
+            # TypeError here means this Streamlit predates the
+            # unsafe_allow_javascript flag; without it st.html strips the
+            # script silently, so fall through rather than render a no-op.
+            st.html(bootstrap, unsafe_allow_javascript=True)
+            used_html = True
+        except TypeError:
+            if mode == "html":
+                raise
+    if not used_html:
+        components.html(bootstrap, height=0)
+
+    st.markdown(
+        f"""<div style="font-size:.86rem;color:{INK_SOFT};
                     display:flex;align-items:center;gap:.55rem;">
           <span style="width:8px;height:8px;border-radius:50%;background:{STATUS_GOOD};
                        box-shadow:0 0 0 3px rgba(12,163,12,.18);display:inline-block;"></span>
           Voice agent loaded — look for the call button in the bottom-right corner of this page.
-        </div>
-        """,
-        height=44,
+        </div>""",
+        unsafe_allow_html=True,
     )
 
 
