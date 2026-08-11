@@ -10,7 +10,7 @@
           "responseCode": 200
         }
       },
-      "id": "b1000000-0000-4000-8000-000000000001",
+      "id": "webhook-(call_analyzed)",
       "name": "Webhook (call_analyzed)",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -19,18 +19,18 @@
         400
       ],
       "webhookId": "claimline-post-call-webhook",
-      "notes": "Response Mode is 'Immediately'. Retell only needs a 200 to know the event was delivered; making it wait for Gmail would risk Retell retrying and sending duplicate emails."
+      "notes": "Responds immediately. Retell only needs a 200 to mark the event delivered; making it wait for Gmail risks a retry and duplicate emails."
     },
     {
       "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// Flatten Retell's call_analyzed payload into a flat object.\n//\n// Retell nests the fields you configured under Post-Call Data\n// Extraction quite deeply:\n//   body.call.call_analysis.custom_analysis_data.claim_filed\n// Referencing that path directly in six different nodes is how these\n// workflows become unmaintainable, and it is the single most common\n// reason a post-call workflow \"runs green but does nothing\" -- one\n// mistyped path silently yields undefined instead of an error.\n// We resolve it once, here, and defend against Retell changing the\n// nesting by also checking a couple of alternative locations.\n// ---------------------------------------------------------------\n\nconst body = $json.body ?? $json;\nconst call = body.call ?? body;\nconst analysis = call.call_analysis ?? {};\nconst data =\n  analysis.custom_analysis_data ??\n  body.custom_analysis_data ??\n  body.post_call_analysis ??\n  {};\n\nconst str = (v) => (v === undefined || v === null ? '' : String(v).trim());\n\n// Post-Call Data Extraction can return a real boolean or the strings\n// \"true\"/\"false\"; normalise both to a real boolean so the IF node has\n// one predictable type to test.\nconst rawFiled = data.claim_filed;\nconst claimFiled =\n  rawFiled === true || String(rawFiled).toLowerCase() === 'true';\n\nconst pad = (n) => String(n).padStart(2, '0');\nconst now = new Date();\nconst timestamp =\n  `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +\n  `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nreturn [\n  {\n    json: {\n      event: str(body.event) || 'call_analyzed',\n      call_id: str(call.call_id),\n      claim_filed: claimFiled,\n      claim_id: str(data.claim_id),\n      urgency: str(data.urgency) || 'n/a',\n      name: str(data.name),\n      email: str(data.email).toLowerCase(),\n      incident_type: str(data.incident_type) || 'n/a',\n      call_summary: str(analysis.call_summary),\n      timestamp\n    }\n  }\n];"
+        "jsCode": "// ---------------------------------------------------------------\n// Flatten Retell's call_analyzed payload.\n//\n// Retell nests the Post-Call Data Extraction fields deeply:\n//   body.call.call_analysis.custom_analysis_data.claim_filed\n// Retyping that path in several nodes is the single most common reason\n// a post-call workflow \"runs green but does nothing\" -- one mistyped\n// path yields undefined silently instead of erroring. Resolve it once.\n// ---------------------------------------------------------------\n\nconst body = $json.body ?? $json;\nconst call = body.call ?? body;\nconst analysis = call.call_analysis ?? {};\nconst data = analysis.custom_analysis_data ?? body.custom_analysis_data ?? {};\n\nconst str = (v) => (v === undefined || v === null ? '' : String(v).trim());\n\n// Extraction can return a real boolean or the strings \"true\"/\"false\".\n// Normalise to a real boolean so the IF node tests one predictable type.\nconst claimFiled =\n  data.claim_filed === true ||\n  String(data.claim_filed).toLowerCase() === 'true';\n\nconst n = new Date();\nconst p = (x) => String(x).padStart(2, '0');\n\nreturn [{ json: {\n  call_id: str(call.call_id),\n  claim_filed: claimFiled,\n  claim_id: str(data.claim_id),\n  urgency: str(data.urgency) || 'n/a',\n  name: str(data.name),\n  email: str(data.email).toLowerCase(),\n  incident_type: str(data.incident_type) || 'n/a',\n  call_summary: str(analysis.call_summary),\n  timestamp: `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())} ` +\n             `${p(n.getHours())}:${p(n.getMinutes())}`\n}}];"
       },
-      "id": "b1000000-0000-4000-8000-000000000003",
+      "id": "flatten-retell-payload",
       "name": "Flatten Retell Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
+        -840,
         400
       ]
     },
@@ -60,12 +60,12 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "b1000000-0000-4000-8000-000000000004",
+      "id": "if-claim_filed",
       "name": "IF claim_filed",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -400,
+        -600,
         400
       ]
     },
@@ -74,22 +74,35 @@
         "sendTo": "={{ $json.email }}",
         "subject": "=Your ClaimLine claim {{ $json.claim_id }} has been filed",
         "emailType": "html",
-        "message": "=<div style=\"font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;\">\n  <div style=\"background:#0f3d5c;padding:24px 28px;border-radius:10px 10px 0 0;\">\n    <div style=\"color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.01em;\">ClaimLine Insurance</div>\n    <div style=\"color:#9fc6dd;font-size:13px;margin-top:4px;\">Claim confirmation</div>\n  </div>\n  <div style=\"border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;padding:28px;\">\n    <p style=\"margin:0 0 16px;font-size:15px;\">Hi {{ $json.name || 'there' }},</p>\n    <p style=\"margin:0 0 20px;font-size:15px;line-height:1.6;\">Thank you for calling ClaimLine. Your claim has been filed and is now in our system.</p>\n    <table style=\"width:100%;border-collapse:collapse;font-size:14px;margin:0 0 20px;\">\n      <tr><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;color:#6b7280;\">Claim ID</td><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;font-weight:700;text-align:right;\">{{ $json.claim_id }}</td></tr>\n      <tr><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;color:#6b7280;\">Priority</td><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;font-weight:600;text-align:right;\">{{ $json.urgency }}</td></tr>\n      <tr><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;color:#6b7280;\">Status</td><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;font-weight:600;text-align:right;\">Filed</td></tr>\n      <tr><td style=\"padding:10px 0;color:#6b7280;\">Filed on</td><td style=\"padding:10px 0;text-align:right;\">{{ $json.timestamp }}</td></tr>\n    </table>\n    <p style=\"margin:0 0 8px;font-size:15px;font-weight:600;\">What happens next</p>\n    <p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;\">{{ $json.urgency === 'Urgent' ? 'Your claim has been flagged as urgent and will be reviewed within 24 to 48 hours. A claims specialist may contact you directly.' : 'Your claim will be reviewed within 5 to 7 business days once all required documents have been received.' }}</p>\n    <p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;\">You can check your claim status at any time by calling back and providing your claim ID.</p>\n    <p style=\"margin:0;font-size:13px;color:#6b7280;line-height:1.6;\">ClaimLine Insurance &middot; support@claimlineinsurance.com &middot; +92 300 7654321<br>Monday to Saturday, 9:00 AM to 6:00 PM. The AI claims assistant is available 24/7.</p>\n    <p style=\"margin:20px 0 0;padding-top:16px;border-top:1px solid #f0f1f3;font-size:12px;color:#9ca3af;\">This is a portfolio demonstration project. ClaimLine Insurance is fictional and no real policy or claim data is involved.</p>\n  </div>\n</div>",
+        "message": "=<div style=\"font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;\">\n  <div style=\"background:#0f3d5c;padding:24px 28px;border-radius:10px 10px 0 0;\">\n    <div style=\"color:#fff;font-size:20px;font-weight:700;\">ClaimLine Insurance</div>\n    <div style=\"color:#9fc6dd;font-size:13px;margin-top:4px;\">Claim confirmation</div>\n  </div>\n  <div style=\"border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;padding:28px;\">\n    <p style=\"margin:0 0 16px;font-size:15px;\">Hi {{ $json.name || 'there' }},</p>\n    <p style=\"margin:0 0 20px;font-size:15px;line-height:1.6;\">Thank you for calling ClaimLine. Your claim has been filed and is now in our system.</p>\n    <table style=\"width:100%;border-collapse:collapse;font-size:14px;margin:0 0 20px;\">\n      <tr><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;color:#6b7280;\">Claim ID</td><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;font-weight:700;text-align:right;\">{{ $json.claim_id }}</td></tr>\n      <tr><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;color:#6b7280;\">Priority</td><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;font-weight:600;text-align:right;\">{{ $json.urgency }}</td></tr>\n      <tr><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;color:#6b7280;\">Status</td><td style=\"padding:10px 0;border-bottom:1px solid #f0f1f3;font-weight:600;text-align:right;\">Filed</td></tr>\n      <tr><td style=\"padding:10px 0;color:#6b7280;\">Filed on</td><td style=\"padding:10px 0;text-align:right;\">{{ $json.timestamp }}</td></tr>\n    </table>\n    <p style=\"margin:0 0 8px;font-size:15px;font-weight:600;\">What happens next</p>\n    <p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;\">{{ $json.urgency === 'Urgent' ? 'Your claim has been flagged as urgent and will be reviewed within 24 to 48 hours. A claims specialist may contact you directly.' : 'Your claim will be reviewed within 5 to 7 business days once all required documents have been received.' }}</p>\n    <p style=\"margin:0 0 20px;font-size:14px;line-height:1.6;color:#374151;\">You can check your claim status at any time by calling back and providing your claim ID.</p>\n    <p style=\"margin:0;font-size:13px;color:#6b7280;line-height:1.6;\">ClaimLine Insurance &middot; support@claimlineinsurance.com &middot; +92 300 7654321</p>\n    <p style=\"margin:20px 0 0;padding-top:16px;border-top:1px solid #f0f1f3;font-size:12px;color:#9ca3af;\">This is a portfolio demonstration project. ClaimLine Insurance is fictional and no real policy or claim data is involved.</p>\n  </div>\n</div>",
         "options": {
           "senderName": "ClaimLine Insurance",
           "appendAttribution": false
         }
       },
-      "id": "b1000000-0000-4000-8000-000000000005",
+      "id": "gmail---send-confirmation",
       "name": "Gmail — Send Confirmation",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -140,
+        -340,
         260
       ],
       "onError": "continueRegularOutput",
-      "notes": "On Error is set to 'Continue' so a bad/missing caller email cannot stop the analytics row from being logged. The dashboard should still show the call even if the email bounced."
+      "notes": "On Error = Continue, so a bad or missing caller email cannot stop the analytics row from being written."
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $('Flatten Retell Payload').first().json;\n\n// $json here is Gmail's API response, not the call data --\n// every n8n node replaces $json with its own output.\nreturn [{ json: {\n  timestamp: f.timestamp,\n  claim_filed: true,\n  urgency: f.urgency,\n  incident_type: f.incident_type\n}}];"
+      },
+      "id": "analytics-row---filed",
+      "name": "Analytics Row — Filed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        260
+      ]
     },
     {
       "parameters": {
@@ -105,66 +118,35 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "timestamp": "={{ $('Flatten Retell Payload').first().json.timestamp }}",
-            "claim_filed": "=true",
-            "urgency": "={{ $('Flatten Retell Payload').first().json.urgency }}",
-            "incident_type": "={{ $('Flatten Retell Payload').first().json.incident_type }}"
-          },
+          "mappingMode": "autoMapInputData",
+          "value": {},
           "matchingColumns": [],
-          "schema": [
-            {
-              "id": "timestamp",
-              "displayName": "timestamp",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "claim_filed",
-              "displayName": "claim_filed",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "urgency",
-              "displayName": "urgency",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "incident_type",
-              "displayName": "incident_type",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
+          "schema": []
         },
         "options": {}
       },
-      "id": "b1000000-0000-4000-8000-000000000006",
-      "name": "Analytics — Log Claim Filed",
+      "id": "log-claim-filed",
+      "name": "Log Claim Filed",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        120,
+        140,
         260
       ],
-      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
+      "notes": "Auto-Map Input Data: the Code node before this emits exactly the four Analytics columns."
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $json;\n\n// Logging calls where nothing was filed is what makes the volume\n// chart meaningful -- without it you only ever see successes and\n// cannot compute a conversion rate.\nreturn [{ json: {\n  timestamp: f.timestamp,\n  claim_filed: false,\n  urgency: 'n/a',\n  incident_type: 'n/a'\n}}];"
+      },
+      "id": "analytics-row---no-claim",
+      "name": "Analytics Row — No Claim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -340,
+        560
+      ]
     },
     {
       "parameters": {
@@ -180,66 +162,22 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "timestamp": "={{ $json.timestamp }}",
-            "claim_filed": "=false",
-            "urgency": "=n/a",
-            "incident_type": "=n/a"
-          },
+          "mappingMode": "autoMapInputData",
+          "value": {},
           "matchingColumns": [],
-          "schema": [
-            {
-              "id": "timestamp",
-              "displayName": "timestamp",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "claim_filed",
-              "displayName": "claim_filed",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "urgency",
-              "displayName": "urgency",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "incident_type",
-              "displayName": "incident_type",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
+          "schema": []
         },
         "options": {}
       },
-      "id": "b1000000-0000-4000-8000-000000000007",
-      "name": "Analytics — Log No Claim",
+      "id": "log-no-claim",
+      "name": "Log No Claim",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        -140,
+        -100,
         560
       ],
-      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
+      "notes": "Logs calls where nothing was filed. Without these rows the volume chart only shows successes."
     }
   ],
   "connections": {
@@ -276,7 +214,7 @@
         ],
         [
           {
-            "node": "Analytics — Log No Claim",
+            "node": "Analytics Row — No Claim",
             "type": "main",
             "index": 0
           }
@@ -287,7 +225,29 @@
       "main": [
         [
           {
-            "node": "Analytics — Log Claim Filed",
+            "node": "Analytics Row — Filed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analytics Row — Filed": {
+      "main": [
+        [
+          {
+            "node": "Log Claim Filed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analytics Row — No Claim": {
+      "main": [
+        [
+          {
+            "node": "Log No Claim",
             "type": "main",
             "index": 0
           }

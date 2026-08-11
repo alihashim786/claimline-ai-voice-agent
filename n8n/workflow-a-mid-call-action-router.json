@@ -8,7 +8,7 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-000000000001",
+      "id": "webhook",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -20,14 +20,14 @@
     },
     {
       "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// Normalize the request coming from Retell.\n//\n// Retell can deliver a Custom Function payload in more than one shape\n// depending on how the Function node is configured:\n//   { \"args\": { ... }, \"name\": \"...\", \"call\": { ... } }   <- most common\n//   { ... fields at top level ... }                          <- raw body mode\n// n8n additionally wraps the HTTP body in `body`.\n// We flatten all of that here ONCE so every node downstream can just\n// use $json.action, $json.policy_number, etc.\n//\n// We also repair the two identifiers that a speech-to-text engine is\n// most likely to mangle:\n//   \"pol one oh two three four\" / \"POL 10234\" / \"pol-10234\" -> POL-10234\n//   \"claim 42\" / \"CLM 42\"                                   -> CLM-000042\n// Doing this server-side means the agent never has to be perfect.\n// ---------------------------------------------------------------\n\nconst raw = $json.body ?? $json;\nconst a = raw.args ?? raw;\n\nconst str = (v) => (v === undefined || v === null ? '' : String(v).trim());\nconst digitsOnly = (v) => str(v).replace(/\\D/g, '');\n\nfunction normalisePolicy(v) {\n  const d = digitsOnly(v);\n  return d ? `POL-${d}` : '';\n}\n\nfunction normaliseClaim(v) {\n  const d = digitsOnly(v);\n  return d ? `CLM-${d.padStart(6, '0')}` : '';\n}\n\nreturn [\n  {\n    json: {\n      action: str(a.action).toLowerCase(),\n      policy_number: normalisePolicy(a.policy_number),\n      claim_id: normaliseClaim(a.claim_id),\n      holder_name: str(a.holder_name || a.name),\n      incident_type: str(a.incident_type),\n      incident_date: str(a.incident_date),\n      description: str(a.description),\n      email: str(a.email).toLowerCase(),\n      urgency_hint: str(a.urgency),\n      raw_policy_number: str(a.policy_number),\n      raw_claim_id: str(a.claim_id)\n    }\n  }\n];"
+        "jsCode": "// ---------------------------------------------------------------\n// Normalize the request coming from Retell.\n//\n// Retell delivers a Custom Function payload as { \"args\": {...} } by\n// default, or flat if args_at_root is on; n8n wraps the HTTP body in\n// `body`. Flatten all of that ONCE so every node downstream can just\n// read $json.action, $json.policy_number, and so on.\n//\n// Also repair the two identifiers speech-to-text is most likely to\n// mangle:\n//   \"pol one oh two three four\" / \"POL 10234\" -> POL-10234\n//   \"claim 42\" / \"CLM 42\"                     -> CLM-000042\n// Doing this server-side means the agent never has to be perfect.\n// ---------------------------------------------------------------\n\nconst raw = $json.body ?? $json;\nconst a = raw.args ?? raw;\n\nconst str = (v) => (v === undefined || v === null ? '' : String(v).trim());\n\n// Speech-to-text does not always render spoken digits as numerals: a\n// caller saying \"P O L one zero two three four\" can transcribe with\n// \"one\" as a word. Stripping non-digits first would silently drop it\n// and turn POL-10234 into POL-0234 -- a valid-looking wrong answer,\n// which is worse than an obvious failure. Map number words to digits\n// first, whole words only so the \"POL\" prefix is untouched.\nconst WORDS = {\n  zero: 0, oh: 0, o: 0, nought: 0,\n  one: 1, won: 1, two: 2, to: 2, too: 2, three: 3, tree: 3,\n  four: 4, for: 4, fore: 4, five: 5, six: 6, sicks: 6,\n  seven: 7, eight: 8, ate: 8, nine: 9, niner: 9\n};\nconst digits = (v) =>\n  str(v)\n    .toLowerCase()\n    // Drop the alphabetic prefix FIRST. Callers spell it out -- \"P O L\n    // one zero two three four\" -- and the letter O in POL would\n    // otherwise be mapped to the digit zero, yielding POL-010234: a\n    // wrong answer that still looks like a policy number, which is far\n    // worse than an obvious failure.\n    .replace(/\\b(p[\\s.\\-]*o[\\s.\\-]*l|c[\\s.\\-]*l[\\s.\\-]*m|policy|claim|number|dash|hyphen)\\b/g, ' ')\n    .replace(/\\b([a-z]+)\\b/g, (w) => (w in WORDS ? String(WORDS[w]) : w))\n    .replace(/\\D/g, '');\n\nreturn [{\n  json: {\n    action: str(a.action).toLowerCase(),\n    policy_number: digits(a.policy_number) ? `POL-${digits(a.policy_number)}` : '',\n    claim_id: digits(a.claim_id) ? `CLM-${digits(a.claim_id).padStart(6, '0')}` : '',\n    holder_name: str(a.holder_name || a.name),\n    incident_type: str(a.incident_type),\n    incident_date: str(a.incident_date),\n    description: str(a.description),\n    email: str(a.email).toLowerCase(),\n    urgency_hint: str(a.urgency)\n  }\n}];"
       },
-      "id": "a1000000-0000-4000-8000-000000000003",
+      "id": "normalize-request",
       "name": "Normalize Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -680,
+        -880,
         340
       ]
     },
@@ -45,7 +45,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "r-validate",
+                    "id": "r-validate_policy",
                     "leftValue": "={{ $json.action }}",
                     "rightValue": "validate_policy",
                     "operator": {
@@ -69,7 +69,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "r-create",
+                    "id": "r-create_claim",
                     "leftValue": "={{ $json.action }}",
                     "rightValue": "create_claim",
                     "operator": {
@@ -93,7 +93,7 @@
                 },
                 "conditions": [
                   {
-                    "id": "r-status",
+                    "id": "r-check_status",
                     "leftValue": "={{ $json.action }}",
                     "rightValue": "check_status",
                     "operator": {
@@ -115,12 +115,12 @@
           "looseTypeValidation": true
         }
       },
-      "id": "a1000000-0000-4000-8000-000000000004",
+      "id": "route-by-action",
       "name": "Route by Action",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -440,
+        -620,
         340
       ]
     },
@@ -136,37 +136,29 @@
           "value": "Policies",
           "mode": "name"
         },
-        "filtersUI": {
-          "values": [
-            {
-              "lookupColumn": "policy_number",
-              "lookupValue": "={{ $json.policy_number }}"
-            }
-          ]
-        },
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-000000000005",
-      "name": "Lookup Policy",
+      "id": "read-policies",
+      "name": "Read Policies",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        -160,
+        -340,
         40
       ],
       "alwaysOutputData": true,
-      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
+      "notes": "Reads the whole tab with NO filter on purpose. The Sheets node's 'Column to match on' is a dropdown populated from the sheet at edit time and can import empty, which fails at runtime as 'The column \"\" could not be found'. The next Code node does the matching instead. Always Output Data is ON so an empty tab still reaches the Respond node."
     },
     {
       "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// Shape the validate_policy answer for the voice agent.\n//\n// Three possible outcomes, all returned as HTTP 200 so Retell always\n// gets something it can speak. Errors are expressed in the payload,\n// never as an HTTP error code -- a 4xx/5xx would make the agent say\n// \"something went wrong\" instead of \"I couldn't find that policy\".\n// ---------------------------------------------------------------\n\nconst asked = $('Normalize Request').first().json;\nconst row = $json || {};\nconst found = Boolean(row.policy_number);\n\nif (!found) {\n  return [\n    {\n      json: {\n        valid: false,\n        result: 'not_found',\n        reason: 'not_found',\n        policy_number: asked.policy_number,\n        message: `No policy found matching ${asked.policy_number}.`\n      }\n    }\n  ];\n}\n\n// Expiry check: a policy that exists but has lapsed is not a valid\n// policy to file a claim against, and the agent should say so plainly.\nconst validUntil = String(row.valid_until || '').trim();\nconst expiryDate = validUntil ? new Date(`${validUntil}T23:59:59Z`) : null;\nconst expired = expiryDate && !isNaN(expiryDate) && expiryDate < new Date();\n\nif (expired) {\n  return [\n    {\n      json: {\n        valid: false,\n        result: 'expired',\n        reason: 'expired',\n        policy_number: row.policy_number,\n        holder_name: row.holder_name,\n        coverage_type: row.coverage_type,\n        valid_until: validUntil,\n        message: `Policy ${row.policy_number} expired on ${validUntil}.`\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      valid: true,\n      result: 'valid',\n      reason: 'ok',\n      policy_number: row.policy_number,\n      holder_name: row.holder_name,\n      coverage_type: row.coverage_type,\n      valid_until: validUntil,\n      message: `Policy ${row.policy_number} is active and held by ${row.holder_name}.`\n    }\n  }\n];"
+        "jsCode": "// ---------------------------------------------------------------\n// Find the policy among the rows read from the Policies tab.\n//\n// The match happens HERE rather than in the Sheets node's filter,\n// because that filter's \"Column to match on\" is a dropdown populated\n// from the sheet at edit time, and an import can leave it empty --\n// which fails at runtime as `The column \"\" could not be found`.\n// A .find() in code cannot be dropped by a dropdown.\n//\n// Every outcome returns HTTP 200 with a `result` string. Retell\n// branches on that string with an exact-match equation, so the routing\n// is deterministic rather than an LLM interpreting a boolean. An HTTP\n// error code would instead make the agent say \"something went wrong\".\n// ---------------------------------------------------------------\n\nconst asked = $('Normalize Request').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.policy_number);\nconst row = rows.find(\n  (r) => String(r.policy_number).trim().toUpperCase() === asked.policy_number\n);\n\nif (!row) {\n  return [{ json: {\n    result: 'not_found', valid: false, reason: 'not_found',\n    policy_number: asked.policy_number,\n    message: `No policy found matching ${asked.policy_number}.`\n  }}];\n}\n\n// A policy that exists but has lapsed is not valid to claim against.\nconst validUntil = String(row.valid_until || '').trim();\nconst expiry = validUntil ? new Date(`${validUntil}T23:59:59Z`) : null;\n\nif (expiry && !isNaN(expiry) && expiry < new Date()) {\n  return [{ json: {\n    result: 'expired', valid: false, reason: 'expired',\n    policy_number: row.policy_number, holder_name: row.holder_name,\n    coverage_type: row.coverage_type, valid_until: validUntil,\n    message: `Policy ${row.policy_number} expired on ${validUntil}.`\n  }}];\n}\n\nreturn [{ json: {\n  result: 'valid', valid: true, reason: 'ok',\n  policy_number: row.policy_number, holder_name: row.holder_name,\n  coverage_type: row.coverage_type, valid_until: validUntil,\n  message: `Policy ${row.policy_number} is active and held by ${row.holder_name}.`\n}}];"
       },
-      "id": "a1000000-0000-4000-8000-000000000006",
+      "id": "build-validate-response",
       "name": "Build Validate Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        60,
+        -100,
         40
       ]
     },
@@ -176,25 +168,25 @@
         "responseBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-000000000007",
+      "id": "respond---policy-validation",
       "name": "Respond — Policy Validation",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        280,
+        140,
         40
       ]
     },
     {
       "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// 1. Generate the claim ID.\n// 2. Re-run urgency triage server-side.\n//\n// Why triage here and not only in the conversation flow: an LLM\n// deciding \"is this urgent?\" is a judgement call that can change\n// between runs. A keyword rule is deterministic -- the same words\n// always produce the same urgency, which is what you want on a record\n// that drives an SLA (24-48h vs 5-7 business days per the policy FAQ).\n// The flow's own guess arrives as `urgency_hint`; we let it escalate\n// to Urgent but never let it downgrade an Urgent to Standard.\n// ---------------------------------------------------------------\n\nconst d = $json;\n\n// CLM- plus the last 6 digits of the epoch millisecond clock.\n// Monotonic, collision-free at demo call volumes, and short enough for\n// the agent to read aloud digit by digit without losing the caller.\nconst claimId = `CLM-${String(Date.now()).slice(-6)}`;\n\nconst URGENT_KEYWORDS = [\n  'injur', 'injured', 'hurt', 'wound', 'bleed', 'blood', 'broken bone',\n  'fracture', 'hospital', 'ambulance', 'emergency', 'er ', 'icu',\n  'surgery', 'unconscious', 'concussion', 'paramedic',\n  'fire', 'burn', 'burning', 'smoke', 'explosion', 'flood', 'flooding',\n  'gas leak', 'collapse', 'structural damage', 'totaled', 'total loss',\n  'write-off', 'life threatening', 'life-threatening', 'critical',\n  'death', 'died', 'fatal'\n];\n\nconst haystack = `${d.description} ${d.incident_type}`.toLowerCase();\nconst matched = URGENT_KEYWORDS.filter((k) => haystack.includes(k));\n\nconst hintIsUrgent = String(d.urgency_hint || '').toLowerCase() === 'urgent';\nconst urgency = matched.length > 0 || hintIsUrgent ? 'Urgent' : 'Standard';\n\n// Google Sheets stores plain strings; format the timestamp the same way\n// the provided Claims-Template.csv does (YYYY-MM-DD HH:mm) so the\n// Streamlit dashboard can parse the whole column with one format.\nconst now = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nconst createdAt =\n  `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +\n  `${pad(now.getHours())}:${pad(now.getMinutes())}`;\n\nreturn [\n  {\n    json: {\n      claim_id: claimId,\n      policy_number: d.policy_number,\n      holder_name: d.holder_name,\n      incident_type: d.incident_type || 'Other',\n      incident_date: d.incident_date,\n      description: d.description,\n      urgency,\n      status: 'Filed',\n      email: d.email,\n      created_at: createdAt,\n      triage_matched_keywords: matched.join(', ')\n    }\n  }\n];"
+        "jsCode": "// ---------------------------------------------------------------\n// Generate the claim ID and run urgency triage.\n//\n// Triage runs here, not only in the conversation flow, because an LLM\n// judging \"is this urgent?\" can answer differently on identical input.\n// A keyword rule is deterministic -- and urgency drives a real SLA\n// (24-48h vs 5-7 business days per the policy FAQ). The agent's own\n// guess arrives as urgency_hint and may escalate to Urgent, but can\n// never downgrade an Urgent to Standard.\n//\n// IMPORTANT: this node's output goes straight into a Google Sheets\n// append using Auto-Map Input Data, so it must emit EXACTLY the ten\n// columns of the Claims tab and nothing else. Anything extra would try\n// to become a column.\n// ---------------------------------------------------------------\n\nconst d = $json;\n\n// CLM- plus the last 6 digits of the epoch clock: monotonic, collision\n// free at demo volumes, and short enough to read aloud digit by digit.\nconst claimId = `CLM-${String(Date.now()).slice(-6)}`;\n\nconst URGENT = [\n  'injur', 'hurt', 'wound', 'bleed', 'blood', 'broken bone', 'fracture',\n  'hospital', 'ambulance', 'emergency', 'icu', 'surgery', 'unconscious',\n  'concussion', 'paramedic', 'fire', 'burn', 'smoke', 'explosion',\n  'flood', 'gas leak', 'collapse', 'structural damage', 'totaled',\n  'total loss', 'write-off', 'life threatening', 'life-threatening',\n  'critical', 'death', 'died', 'fatal'\n];\n\nconst haystack = `${d.description} ${d.incident_type}`.toLowerCase();\nconst matched = URGENT.some((k) => haystack.includes(k));\nconst urgency =\n  matched || String(d.urgency_hint || '').toLowerCase() === 'urgent'\n    ? 'Urgent'\n    : 'Standard';\n\n// Match the timestamp format of the provided Claims-Template.csv so the\n// dashboard can parse the whole column with one format.\nconst n = new Date();\nconst p = (x) => String(x).padStart(2, '0');\nconst createdAt =\n  `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())} ` +\n  `${p(n.getHours())}:${p(n.getMinutes())}`;\n\nreturn [{ json: {\n  claim_id: claimId,\n  policy_number: d.policy_number,\n  holder_name: d.holder_name,\n  incident_type: d.incident_type || 'Other',\n  incident_date: d.incident_date,\n  description: d.description,\n  urgency: urgency,\n  status: 'Filed',\n  email: d.email,\n  created_at: createdAt\n}}];"
       },
-      "id": "a1000000-0000-4000-8000-000000000008",
+      "id": "generate-claim-id-&-triage",
       "name": "Generate Claim ID & Triage",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -160,
+        -340,
         340
       ]
     },
@@ -212,137 +204,33 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "claim_id": "={{ $json.claim_id }}",
-            "policy_number": "={{ $json.policy_number }}",
-            "holder_name": "={{ $json.holder_name }}",
-            "incident_type": "={{ $json.incident_type }}",
-            "incident_date": "={{ $json.incident_date }}",
-            "description": "={{ $json.description }}",
-            "urgency": "={{ $json.urgency }}",
-            "status": "={{ $json.status }}",
-            "email": "={{ $json.email }}",
-            "created_at": "={{ $json.created_at }}"
-          },
+          "mappingMode": "autoMapInputData",
+          "value": {},
           "matchingColumns": [],
-          "schema": [
-            {
-              "id": "claim_id",
-              "displayName": "claim_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "policy_number",
-              "displayName": "policy_number",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "holder_name",
-              "displayName": "holder_name",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "incident_type",
-              "displayName": "incident_type",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "incident_date",
-              "displayName": "incident_date",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "description",
-              "displayName": "description",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "urgency",
-              "displayName": "urgency",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "email",
-              "displayName": "email",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": true
+          "schema": []
         },
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-000000000009",
+      "id": "append-claim-row",
       "name": "Append Claim Row",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        60,
+        -100,
         340
       ],
-      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
+      "notes": "Auto-Map Input Data: the previous Code node emits exactly the ten Claims columns, matched to headers at run time. No per-column mapping to configure, and nothing for an import to drop."
     },
     {
       "parameters": {
-        "jsCode": "// Return only what the agent needs to speak. The caller does not need\n// to hear the row index or the keyword list, and every extra field is\n// another thing the model can decide to read out loud.\nconst c = $('Generate Claim ID & Triage').first().json;\n\nreturn [\n  {\n    json: {\n      success: true,\n      result: c.urgency === 'Urgent' ? 'urgent' : 'standard',\n      claim_id: c.claim_id,\n      urgency: c.urgency,\n      status: c.status,\n      holder_name: c.holder_name,\n      incident_type: c.incident_type,\n      message:\n        c.urgency === 'Urgent'\n          ? `Claim ${c.claim_id} has been filed and flagged as urgent for priority review within 24 to 48 hours.`\n          : `Claim ${c.claim_id} has been filed and will be reviewed within 5 to 7 business days.`\n    }\n  }\n];"
+        "jsCode": "// Return only what the agent needs to speak. Every extra field is one\n// more thing the model can decide to read out loud to the caller.\nconst c = $('Generate Claim ID & Triage').first().json;\n\nreturn [{ json: {\n  result: c.urgency === 'Urgent' ? 'urgent' : 'standard',\n  success: true,\n  claim_id: c.claim_id,\n  urgency: c.urgency,\n  status: c.status,\n  holder_name: c.holder_name,\n  incident_type: c.incident_type,\n  message: c.urgency === 'Urgent'\n    ? `Claim ${c.claim_id} has been filed and flagged as urgent for priority review within 24 to 48 hours.`\n    : `Claim ${c.claim_id} has been filed and will be reviewed within 5 to 7 business days.`\n}}];"
       },
-      "id": "a1000000-0000-4000-8000-00000000000a",
+      "id": "build-claim-response",
       "name": "Build Claim Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        280,
+        140,
         340
       ]
     },
@@ -352,12 +240,12 @@
         "responseBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-00000000000b",
+      "id": "respond---claim-created",
       "name": "Respond — Claim Created",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        500,
+        380,
         340
       ]
     },
@@ -373,37 +261,29 @@
           "value": "Claims",
           "mode": "name"
         },
-        "filtersUI": {
-          "values": [
-            {
-              "lookupColumn": "claim_id",
-              "lookupValue": "={{ $json.claim_id }}"
-            }
-          ]
-        },
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-00000000000c",
-      "name": "Lookup Claim",
+      "id": "read-claims",
+      "name": "Read Claims",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
-        -160,
+        -340,
         640
       ],
       "alwaysOutputData": true,
-      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
+      "notes": "Reads the whole tab with NO filter on purpose. The Sheets node's 'Column to match on' is a dropdown populated from the sheet at edit time and can import empty, which fails at runtime as 'The column \"\" could not be found'. The next Code node does the matching instead. Always Output Data is ON so an empty tab still reaches the Respond node."
     },
     {
       "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// Shape the check_status answer.\n//\n// `found: false` is a normal, expected outcome, not an error --\n// the conversation flow branches on it to offer a retry or a handoff.\n// ---------------------------------------------------------------\n\nconst asked = $('Normalize Request').first().json;\nconst row = $json || {};\n\nif (!row.claim_id) {\n  return [\n    {\n      json: {\n        found: false,\n        result: 'not_found',\n        claim_id: asked.claim_id,\n        message: `No claim found with ID ${asked.claim_id}.`\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      found: true,\n      result: 'found',\n      claim_id: row.claim_id,\n      status: row.status,\n      incident_type: row.incident_type,\n      urgency: row.urgency,\n      holder_name: row.holder_name,\n      incident_date: row.incident_date,\n      created_at: row.created_at,\n      message: `Claim ${row.claim_id} for a ${row.incident_type} incident is currently ${row.status}.`\n    }\n  }\n];"
+        "jsCode": "// Find the claim among the rows read from the Claims tab.\n// `result: not_found` is a normal outcome, not an error -- the\n// conversation flow branches on it to offer a retry or a handoff.\nconst asked = $('Normalize Request').first().json;\nconst rows = $input.all().map((i) => i.json).filter((r) => r && r.claim_id);\nconst row = rows.find(\n  (r) => String(r.claim_id).trim().toUpperCase() === asked.claim_id\n);\n\nif (!row) {\n  return [{ json: {\n    result: 'not_found', found: false, claim_id: asked.claim_id,\n    message: `No claim found with ID ${asked.claim_id}.`\n  }}];\n}\n\nreturn [{ json: {\n  result: 'found', found: true,\n  claim_id: row.claim_id, status: row.status,\n  incident_type: row.incident_type, urgency: row.urgency,\n  holder_name: row.holder_name, incident_date: row.incident_date,\n  created_at: row.created_at,\n  message: `Claim ${row.claim_id} for a ${row.incident_type} incident is currently ${row.status}.`\n}}];"
       },
-      "id": "a1000000-0000-4000-8000-00000000000d",
+      "id": "build-status-response",
       "name": "Build Status Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        60,
+        -100,
         640
       ]
     },
@@ -413,12 +293,12 @@
         "responseBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-00000000000e",
+      "id": "respond---claim-status",
       "name": "Respond — Claim Status",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        280,
+        140,
         640
       ]
     },
@@ -428,15 +308,15 @@
         "responseBody": "={{ JSON.stringify({ error: 'unknown_action', received: $json.action, message: 'action must be one of validate_policy, create_claim, check_status.' }) }}",
         "options": {}
       },
-      "id": "a1000000-0000-4000-8000-00000000000f",
+      "id": "respond---unknown-action",
       "name": "Respond — Unknown Action",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        60,
-        920
+        -340,
+        900
       ],
-      "notes": "Safety net. A typo in the Retell function's `action` value would otherwise leave the branch with nowhere to go and the caller in dead air."
+      "notes": "Safety net. A typo in the action value would otherwise leave the branch with nowhere to go and the caller in dead air."
     }
   ],
   "connections": {
@@ -466,7 +346,7 @@
       "main": [
         [
           {
-            "node": "Lookup Policy",
+            "node": "Read Policies",
             "type": "main",
             "index": 0
           }
@@ -480,7 +360,7 @@
         ],
         [
           {
-            "node": "Lookup Claim",
+            "node": "Read Claims",
             "type": "main",
             "index": 0
           }
@@ -494,7 +374,7 @@
         ]
       ]
     },
-    "Lookup Policy": {
+    "Read Policies": {
       "main": [
         [
           {
@@ -549,7 +429,7 @@
         ]
       ]
     },
-    "Lookup Claim": {
+    "Read Claims": {
       "main": [
         [
           {
