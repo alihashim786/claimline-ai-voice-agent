@@ -62,7 +62,8 @@ flowchart TD
 
 | Tool | Role |
 |---|---|
-| [Retell AI](https://www.retellai.com/) | Voice agent platform — Conversation Flow + Conductor, Knowledge Base, custom functions, Post-Call Data Extraction, webhooks, website widget |
+| [Retell AI](https://www.retellai.com/) | Voice agent platform — Conversation Flow + Conductor, Knowledge Base, custom functions, Post-Call Data Extraction, webhooks |
+| [retell-client-js-sdk](https://www.npmjs.com/package/retell-client-js-sdk) | In-browser voice calls, with the access token minted server-side by Streamlit |
 | [n8n](https://n8n.io/) | Two workflows — synchronous mid-call action router, asynchronous post-call confirmation |
 | Google Sheets | Data layer — `Policies`, `Claims`, `Analytics` tabs |
 | Gmail | Automated claim confirmation emails |

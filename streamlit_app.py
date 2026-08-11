@@ -26,7 +26,6 @@ from datetime import datetime
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import streamlit.components.v1 as components
 
 # --------------------------------------------------------------------------
 # Design tokens
@@ -52,6 +51,7 @@ BRAND_ACCENT = "#2a78d6"
 SERIES_BLUE = "#2a78d6"
 STATUS_CRITICAL = "#d03b3b"
 STATUS_GOOD = "#0ca30c"
+STATUS_WARNING = "#fab219"
 
 FONT_STACK = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
 
@@ -197,6 +197,45 @@ def inject_css() -> None:
           .cl-tile-value.is-critical {{ color: {STATUS_CRITICAL}; }}
 
           /* ---- misc ------------------------------------------------- */
+          /* ---- live call panel -------------------------------------- */
+          .cl-call {{
+            background: {SURFACE};
+            border: 1px solid rgba(11,11,11,.10);
+            border-radius: 14px; padding: 1rem 1.2rem; margin-top: .7rem;
+            box-shadow: 0 1px 2px rgba(11,11,11,.04);
+          }}
+          .cl-call-row {{ display: flex; align-items: center; gap: .7rem; }}
+          .cl-call-dot {{
+            width: 10px; height: 10px; border-radius: 50%;
+            background: {INK_MUTED}; flex: none;
+          }}
+          .cl-call-dot.is-connecting {{
+            background: {STATUS_WARNING};
+            animation: cl-pulse 1.1s ease-in-out infinite;
+          }}
+          .cl-call-dot.is-live {{
+            background: {STATUS_GOOD};
+            box-shadow: 0 0 0 4px rgba(12,163,12,.16);
+            animation: cl-pulse 1.6s ease-in-out infinite;
+          }}
+          .cl-call-dot.is-ended {{ background: {INK_MUTED}; }}
+          .cl-call-dot.is-error {{ background: {STATUS_CRITICAL}; }}
+          @keyframes cl-pulse {{
+            0%,100% {{ opacity: 1; }} 50% {{ opacity: .35; }}
+          }}
+          .cl-call-status {{ font-size: .92rem; font-weight: 600; color: {INK}; flex: 1; }}
+          .cl-call-end {{
+            background: {STATUS_CRITICAL}; color: #fff; border: none;
+            border-radius: 8px; padding: .4rem .9rem; font-size: .84rem;
+            font-weight: 600; cursor: pointer; font-family: inherit;
+          }}
+          .cl-call-end:hover {{ background: #b32f2f; }}
+          .cl-call-node {{
+            font-size: .78rem; color: {INK_MUTED}; margin-top: .45rem;
+            font-family: ui-monospace, Consolas, monospace;
+          }}
+          .cl-call-err {{ font-size: .84rem; color: {STATUS_CRITICAL}; margin-top: .45rem; }}
+
           /* ---- chart cards ------------------------------------------ */
           /* The chart itself is the card. An HTML wrapper div cannot work
              here: Streamlit renders each element as a sibling, so a <div>
@@ -304,97 +343,152 @@ def secret(section_name: str, key: str, default: str = "") -> str:
 # --------------------------------------------------------------------------
 # Retell website widget
 # --------------------------------------------------------------------------
-def render_retell_widget(public_key: str, agent_id: str, agent_version: str = "") -> None:
-    """Embed the Retell website widget.
+RETELL_SDK = "https://esm.sh/retell-client-js-sdk@2.0.8"
 
-    Harder than dropping in a <script> tag, because of where the script ends up.
 
-    The widget renders a `position: fixed` call button and needs getUserMedia
-    for the microphone. Both of those care about which document the script runs
-    in:
+def create_web_call(api_key: str, agent_id: str) -> dict:
+    """Register a web call with Retell and return its short-lived access token.
 
-    * Inside an iframe, a fixed-position button is clipped by the *iframe*, not
-      the page — in a 44px-tall frame it is simply invisible.
-    * Microphone access has to be explicitly delegated to an iframe, or the
-      browser blocks the call before it starts.
+    This runs SERVER-SIDE, inside Streamlit's Python process. That is the whole
+    point: the Retell *private* API key never leaves the server, and the browser
+    only ever receives a scoped, ~10-minute LiveKit token that can join exactly
+    one call room and do nothing else.
 
-    So we want the script in the top-level document. Two ways to get there,
-    tried in order:
+    Why this exists at all: Retell's `retell-widget.js` — the "just add a script
+    tag with your public key" option — is a **chat** widget. Its bundle contains
+    no WebRTC, no getUserMedia and no audio handling, so it cannot place a voice
+    call however it is configured. Browser voice requires the client SDK plus a
+    token minted with the private key, which means a server. Streamlit is that
+    server.
 
-    1. `st.html(..., unsafe_allow_javascript=True)` — renders into the real page,
-       no iframe at all. This is the right answer, and it is also the supported
-       one: `st.components.v1.html` is deprecated with a removal date that has
-       already passed.
-    2. `st.components.v1.html` — iframed, so the bootstrap below hops to
-       `window.parent.document`. Streamlit builds component iframes with
-       `srcdoc`, which inherits the parent origin, so that access is permitted.
-
-    The same bootstrap script serves both: under `st.html` there is no iframe,
-    so `window.parent === window` and the hop is a no-op.
-
-    Set `retell.embed_mode` in secrets to "html" or "iframe" to force one path
-    if the automatic choice ever misbehaves in a browser.
-
-    The public key is safe to expose in page source; that is the entire point
-    of Retell's public-key flow (no backend token server needed). Never put a
-    Retell *private* API key anywhere in this file.
+    Not cached: a token is single-use and time-limited, so every call gets a
+    fresh one, minted at the moment the visitor clicks.
     """
-    version_attr = (
-        f'd.setAttribute("data-agent-version", {json.dumps(agent_version)});'
-        if agent_version
-        else ""
-    )
+    import urllib.request
 
-    bootstrap = f"""
-        <script>
-        (function () {{
-          function build(doc) {{
-            if (doc.getElementById("retell-widget")) return true;
-            var d = doc.createElement("script");
-            d.id = "retell-widget";
-            d.type = "module";
-            d.src = "https://dashboard.retellai.com/retell-widget.js";
-            d.setAttribute("data-public-key", {json.dumps(public_key)});
-            d.setAttribute("data-agent-id", {json.dumps(agent_id)});
-            {version_attr}
-            d.setAttribute("data-title", "ClaimLine AI");
-            d.setAttribute("data-bot-name", "ClaimLine AI");
-            d.setAttribute("data-color", {json.dumps(BRAND_ACCENT)});
-            d.setAttribute("data-popup-message", "Have a question or need to file a claim? Talk to me.");
-            d.setAttribute("data-show-ai-popup", "true");
-            d.setAttribute("data-auto-open", "false");
-            doc.body.appendChild(d);
-            return true;
-          }}
-          try {{ build(window.parent.document); }} catch (e) {{ build(document); }}
-        }})();
-        </script>
+    req = urllib.request.Request(
+        "https://api.retellai.com/v2/create-web-call",
+        data=json.dumps({"agent_id": agent_id}).encode(),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
+
+
+def render_voice_call(access_token: str, call_id: str) -> None:
+    """Run the live call in the page via retell-client-js-sdk.
+
+    Rendered with `st.html(..., unsafe_allow_javascript=True)`, which injects
+    into the **top-level document** rather than an iframe. That matters twice
+    over: microphone permission belongs to the real page instead of needing to
+    be delegated into a frame, and nothing gets clipped by a short iframe.
+
+    Streamlit re-runs this whole script on every interaction, so the SDK client
+    is parked on `window` and keyed by call_id. A re-run re-binds the UI to the
+    *existing* client instead of starting a second, overlapping call.
+
+    There is deliberately no `st.components.v1.html` fallback here. That renders
+    into an iframe, and Streamlit's component iframes do not list `microphone`
+    in their `allow` attribute — so the browser blocks getUserMedia and the call
+    can never connect. Falling back to it would produce a call button that fails
+    for a reason nobody could see. Requiring a new enough Streamlit is the
+    honest option, which is why requirements.txt floors it.
     """
+    markup = f"""
+<div id="cl-call" class="cl-call">
+  <div class="cl-call-row">
+    <span id="cl-dot" class="cl-call-dot"></span>
+    <span id="cl-status" class="cl-call-status">Connecting&hellip;</span>
+    <button id="cl-end" class="cl-call-end">End call</button>
+  </div>
+  <div id="cl-node" class="cl-call-node"></div>
+  <div id="cl-err" class="cl-call-err"></div>
+</div>
 
-    mode = secret("retell", "embed_mode", "auto").lower()
-    used_html = False
-    if mode in ("auto", "html"):
-        try:
-            # TypeError here means this Streamlit predates the
-            # unsafe_allow_javascript flag; without it st.html strips the
-            # script silently, so fall through rather than render a no-op.
-            st.html(bootstrap, unsafe_allow_javascript=True)
-            used_html = True
-        except TypeError:
-            if mode == "html":
-                raise
-    if not used_html:
-        components.html(bootstrap, height=0)
+<script type="module">
+import {{ RetellWebClient }} from "{RETELL_SDK}";
 
-    st.markdown(
-        f"""<div style="font-size:.86rem;color:{INK_SOFT};
-                    display:flex;align-items:center;gap:.55rem;">
-          <span style="width:8px;height:8px;border-radius:50%;background:{STATUS_GOOD};
-                       box-shadow:0 0 0 3px rgba(12,163,12,.18);display:inline-block;"></span>
-          Voice agent loaded — look for the call button in the bottom-right corner of this page.
-        </div>""",
-        unsafe_allow_html=True,
-    )
+const CALL_ID = {json.dumps(call_id)};
+const TOKEN   = {json.dumps(access_token)};
+
+const $ = (id) => document.getElementById(id);
+
+function paint(state, text) {{
+  const dot = $("cl-dot"), status = $("cl-status"), end = $("cl-end");
+  if (!dot) return;
+  dot.className = "cl-call-dot is-" + state;
+  status.textContent = text;
+  end.style.display = (state === "live" || state === "connecting") ? "" : "none";
+}}
+
+function bind(client) {{
+  const end = $("cl-end");
+  if (end) end.onclick = () => {{ try {{ client.stopCall(); }} catch (e) {{}} paint("ended", "Call ended"); }};
+
+  client.on("call_started",       () => paint("live", "Connected \\u2014 start speaking"));
+  client.on("call_ready",         () => paint("live", "Connected \\u2014 start speaking"));
+  client.on("agent_start_talking",() => paint("live", "ClaimLine AI is speaking\\u2026"));
+  client.on("agent_stop_talking", () => paint("live", "Listening\\u2026"));
+  client.on("call_ended",         () => paint("ended", "Call ended"));
+
+  // The agent is a node graph, so we can show which node it is in as the
+  // conversation branches. Nice to watch the flow route in real time.
+  client.on("node_transition", (e) => {{
+    const n = $("cl-node");
+    if (n && e && e.new_node_name) n.textContent = "Flow node: " + e.new_node_name;
+  }});
+
+  client.on("error", (e) => {{
+    paint("error", "Call error");
+    const box = $("cl-err");
+    if (box) box.textContent = (e && (e.message || e.error)) || "Unknown error from the voice SDK.";
+    try {{ client.stopCall(); }} catch (_) {{}}
+  }});
+}}
+
+if (window.__clClient && window.__clCallId === CALL_ID) {{
+  // A Streamlit re-run redrew this block; the call is already running.
+  bind(window.__clClient);
+  paint("live", "Connected \\u2014 start speaking");
+}} else {{
+  const client = new RetellWebClient();
+  window.__clClient = client;
+  window.__clCallId = CALL_ID;
+  bind(client);
+  paint("connecting", "Requesting microphone\\u2026");
+  client.startCall({{ accessToken: TOKEN }}).then(() => {{
+    paint("live", "Connected \\u2014 start speaking");
+  }}).catch((err) => {{
+    paint("error", "Could not start the call");
+    const box = $("cl-err");
+    if (box) {{
+      box.textContent = (err && err.message) ? err.message
+        : "The browser blocked the microphone. Allow mic access for this site and try again.";
+    }}
+  }});
+}}
+</script>
+        """
+
+    try:
+        st.html(markup, unsafe_allow_javascript=True)
+    except TypeError:
+        # Streamlit predates the unsafe_allow_javascript flag. Without it,
+        # st.html strips the script silently and the panel would render as a
+        # dead placeholder, so say plainly what is wrong instead.
+        st.markdown(
+            '<div class="cl-note"><b>Streamlit is too old to run the voice call.</b> '
+            f"This app needs <code>st.html(..., unsafe_allow_javascript=True)</code>, "
+            f"but the running version is <code>{st.__version__}</code>. Upgrade with "
+            "<code>pip install -U 'streamlit&gt;=1.61.1'</code>.<br>There is no iframe "
+            "fallback: Streamlit's component iframes do not permit microphone access, "
+            "so a call started there can never connect.</div>",
+            unsafe_allow_html=True,
+        )
 
 
 # --------------------------------------------------------------------------
@@ -623,29 +717,25 @@ def main() -> None:
         "access when your browser asks, then try filing a claim against policy POL-10234.",
     )
 
-    public_key = secret("retell", "public_key")
+    api_key = secret("retell", "api_key")
     agent_id = secret("retell", "agent_id")
-    agent_version = secret("retell", "agent_version")
 
-    # Validate the SHAPE of the credentials, not just their presence.
-    # A leftover placeholder like "PASTE_PUBLIC_KEY_HERE" is a non-empty
-    # string, so a truthiness check happily renders the widget with a junk
-    # key -- the call button appears and then silently fails to connect,
-    # which is far harder to diagnose than no button at all.
-    key_ok = public_key.startswith("public_key_")
+    # Validate the SHAPE of the credentials, not merely their presence. A
+    # leftover placeholder is a non-empty string, so a truthiness check would
+    # happily render a call button that can never connect -- much harder to
+    # diagnose than no button at all.
+    key_ok = api_key.startswith("key_")
     agent_ok = agent_id.startswith("agent_")
 
-    if key_ok and agent_ok:
-        render_retell_widget(public_key, agent_id, agent_version)
-    else:
+    if not (key_ok and agent_ok):
         problems = []
-        if not public_key:
-            problems.append("<code>retell.public_key</code> is missing")
+        if not api_key:
+            problems.append("<code>retell.api_key</code> is missing")
         elif not key_ok:
             problems.append(
-                "<code>retell.public_key</code> does not start with "
-                "<code>public_key_</code> — it is still a placeholder, or the "
-                "private API key was pasted by mistake"
+                "<code>retell.api_key</code> does not start with <code>key_</code> — "
+                "it is still a placeholder, or a <i>public</i> key was pasted instead "
+                "of the private API key"
             )
         if not agent_id:
             problems.append("<code>retell.agent_id</code> is missing")
@@ -653,15 +743,54 @@ def main() -> None:
             problems.append(
                 "<code>retell.agent_id</code> does not start with <code>agent_</code>"
             )
-
         st.markdown(
-            '<div class="cl-note"><b>Voice widget not configured.</b><ul style="margin:.5rem 0 .4rem 1rem;">'
+            '<div class="cl-note"><b>Voice calling not configured.</b><ul style="margin:.5rem 0 .4rem 1rem;">'
             + "".join(f"<li>{p}</li>" for p in problems)
             + "</ul>Set these in <code>.streamlit/secrets.toml</code> locally, or in "
             "<b>Settings → Secrets</b> on Streamlit Community Cloud (editing the local "
-            "file does not update the deployed app).</div>",
+            "file does <i>not</i> update the deployed app).</div>",
             unsafe_allow_html=True,
         )
+    else:
+        call_col, hint_col = st.columns([1, 3])
+        with call_col:
+            start = st.button("📞  Talk to ClaimLine AI", width="stretch")
+        with hint_col:
+            st.markdown(
+                f'<div style="padding-top:.55rem;font-size:.86rem;color:{INK_MUTED};">'
+                "Your browser will ask for microphone access — that is the call "
+                "connecting, not a tracker.</div>",
+                unsafe_allow_html=True,
+            )
+
+        if start:
+            # Mint the token at the moment of the click. It is single-use and
+            # expires in about ten minutes, so it cannot be prepared in advance.
+            try:
+                call = create_web_call(api_key, agent_id)
+                st.session_state["cl_call"] = {
+                    "token": call["access_token"],
+                    "call_id": call.get("call_id", ""),
+                }
+            except Exception as exc:  # noqa: BLE001 - surfaced to the user below
+                st.session_state["cl_call"] = None
+                st.session_state["cl_call_error"] = str(exc)
+
+        if st.session_state.get("cl_call_error"):
+            st.markdown(
+                '<div class="cl-note"><b>Could not start a call.</b> Retell rejected the '
+                f'request: <code>{st.session_state["cl_call_error"]}</code><br>Check that '
+                "<code>retell.api_key</code> is the private API key and that the agent is "
+                "published.</div>",
+                unsafe_allow_html=True,
+            )
+            st.session_state["cl_call_error"] = ""
+
+        if st.session_state.get("cl_call"):
+            render_voice_call(
+                st.session_state["cl_call"]["token"],
+                st.session_state["cl_call"]["call_id"],
+            )
 
     st.markdown(
         f"""

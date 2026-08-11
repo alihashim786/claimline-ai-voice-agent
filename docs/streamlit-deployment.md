@@ -108,8 +108,10 @@ Replace the placeholder in `README.md` with your real app URL and push.
 | `Could not deserialize key data` | `private_key` newlines were expanded | Must be a single line with literal `\n`, in triple quotes |
 | `SpreadsheetNotFound` | Wrong Spreadsheet ID | Re-copy it from the sheet URL, between `/d/` and `/edit`. (Drive API is *not* required — `open_by_key` uses the Sheets API only.) |
 | `APIError 403` | Sheet not shared with the service account | Share → paste `client_email` → Viewer |
-| Call button missing | Retell secrets absent, or key/agent-id swapped | `public_key` starts `public_key_`, `agent_id` starts `agent_` |
-| Call button appears, nothing happens on click | Microphone blocked | Must be HTTPS (Cloud is) and permission granted; check site permissions in the address bar |
+| Call button missing | Retell secrets absent or malformed | `api_key` must start `key_` (the PRIVATE key) and `agent_id` must start `agent_` |
+| Call connects then immediately errors | Microphone blocked | Must be HTTPS (Cloud is) and permission granted; check site permissions in the address bar |
+| "Streamlit is too old to run the voice call" | Streamlit < 1.61.1 | The call must run outside an iframe (component iframes forbid microphone access), which needs `st.html(unsafe_allow_javascript=True)` |
+| "Could not start a call" | Retell rejected the token request | Check `api_key` is the private key and the agent is published |
 | App sleeps / "get this app back up" | Free tier hibernates after ~7 days idle | Click the wake button. Visit it before showing anyone. |
 | Charts look right locally, wrong on Cloud | Different plotly version | `requirements.txt` floors are there for this; bump if needed |
 

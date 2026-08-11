@@ -322,7 +322,27 @@ exists; the public key you have to create.
 On the agent page, click the **ID** control next to *Agent details* (bottom-left
 of the canvas) and copy it. It starts with `agent_`.
 
-### 11b. Public key — you MINT this, it does not already exist
+### 11b. This project does NOT use a public key
+
+> **Read this before creating one.** Retell's website widget
+> (`dashboard.retellai.com/retell-widget.js`) — the "just add a script tag with
+> your public key, no backend needed" option — is a **chat** widget. Its bundle
+> contains no WebRTC, no `getUserMedia` and no audio code at all, so it cannot
+> place a voice call however it is configured. It reads `data-widget`, which
+> defaults to `chat`, and its only other mode is `callback` (a form that
+> collects a phone number for a human to ring back).
+>
+> Browser **voice** therefore requires `retell-client-js-sdk` plus a per-call
+> access token from `POST /v2/create-web-call`, and minting that token needs
+> your **private** API key — which needs a server. The Streamlit app is that
+> server: it mints the token in Python and passes only the short-lived token
+> (a ~10-minute LiveKit JWT, scoped to one call room) to the browser.
+>
+> So the dashboard needs `retell.api_key` (private) in Streamlit secrets, not a
+> public key. The steps below are kept only in case you want the chat widget
+> for some other page.
+
+### 11b-alt. Public key — for the CHAT widget only
 
 This is account-level, not per-agent, so it is **not** on the agent page and
 **not** behind the agent's *Share* button (Share gives you a hosted voice-orb /
