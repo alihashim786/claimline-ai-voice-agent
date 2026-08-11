@@ -11,6 +11,10 @@ Two workflows, deliberately split by *latency budget*:
 This is the core architectural idea of the project. Anything a caller has to
 wait for goes in A; everything else goes in B.
 
+> **Prefer clicking to reading?** [`n8n-walkthrough.md`](n8n-walkthrough.md) is
+> the same build as a click-by-click guide, including how to test both
+> workflows inside the n8n editor with pinned data instead of using a terminal.
+
 ---
 
 ## 1. Import both workflows
@@ -48,8 +52,8 @@ two in Workflow B. Import from `n8n/local/` instead and this is already done.
 
 | Node | Credential |
 |---|---|
-| Workflow A → `Lookup Policy`, `Append Claim Row`, `Lookup Claim` | Google Sheets OAuth2 |
-| Workflow B → `Analytics — Log Claim Filed`, `Analytics — Log No Claim` | Google Sheets OAuth2 (same one) |
+| Workflow A → `Read Policies`, `Append Claim Row`, `Read Claims` | Google Sheets OAuth2 |
+| Workflow B → `Log Claim Filed`, `Log No Claim` | Google Sheets OAuth2 (same one) |
 | Workflow B → `Gmail — Send Confirmation` | Gmail OAuth2 |
 
 Create the first one via **Create new**, then select it from the dropdown in the
@@ -156,9 +160,9 @@ analytics row.
 Webhook (POST, responseMode = responseNode)
   → Normalize Request   flatten Retell's {args:{…}} wrapper; repair POL-/CLM- formats
   → Switch on action
-       ├─ validate_policy → Lookup Policy (Policies)  → Build Validate Response → Respond
-       ├─ create_claim    → Generate Claim ID & Triage → Append Claim Row (Claims) → Build Claim Response → Respond
-       ├─ check_status    → Lookup Claim (Claims)     → Build Status Response   → Respond
+       ├─ validate_policy → Read Policies  → Build Validate Response → Respond
+       ├─ create_claim    → Generate Claim ID & Triage → Append Claim Row → Build Claim Response → Respond
+       ├─ check_status    → Read Claims     → Build Status Response   → Respond
        └─ fallback        → Respond (unknown_action)
 ```
 
@@ -168,11 +172,13 @@ Three things in there are load-bearing:
 for a Respond to Webhook node". Without it n8n answers instantly with a generic
 acknowledgement and Retell never receives the claim ID.
 
-**`Always Output Data` on both lookup nodes** — a Sheets lookup that matches
-nothing returns *zero items*, which stops the branch dead. No Respond node
-fires, Retell waits, and the caller sits in silence until the function times
-out. With the flag on, a no-match still emits one empty item and the "not found"
-response gets built and returned.
+**Lookups read the whole tab and match in a Code node** — they do not use the
+Sheets node's row filter. That filter's "Column to match on" is a dropdown
+populated by reading your sheet *at edit time*, and it can import empty, failing
+at runtime as `The column "" could not be found`. A `.find()` in JavaScript
+cannot be blanked by a dropdown. `Always Output Data` is still on so an empty
+tab produces one item rather than zero, which would stop the branch dead and
+leave the caller in silence.
 
 **Every branch ends in a Respond node, including the fallback.** In a
 synchronous workflow, a path with no Respond node is a hung phone call.
