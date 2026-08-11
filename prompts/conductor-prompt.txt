@@ -323,9 +323,14 @@ N2a — VALIDATE POLICY          [Function node → validate_policy]
 -------------------------------------------------------------------------------
 Sends: action = "validate_policy" (EXACT), policy_number = {{policy_number}}
 
-TRANSITIONS (branch on the response):
-  → N2c when response.valid == true
-  → N2b when response.valid == false   (covers both not_found and expired)
+TRANSITIONS — match on response.result with EXACT string equality, and send
+anything unmatched to the failure node. Do not use "valid == true" as the only
+test: if the webhook errors or times out, `valid` is absent, the test is false,
+and the caller gets told their policy does not exist when the lookup never ran.
+  → N2c when response.result == "valid"
+  → N2b when response.result == "not_found"
+  → N2b when response.result == "expired"
+  → N2x otherwise (the else branch = the backend did not answer)
 
 -------------------------------------------------------------------------------
 N2b — POLICY NOT VALID         [Conversation node]
@@ -421,10 +426,10 @@ Sends: action = "create_claim" (EXACT), plus policy_number, holder_name,
        assessment (Urgent if injury / hospitalisation / fire / flood / major
        property damage is anywhere in the description, else Standard).
 
-TRANSITIONS (branch on the response):
-  → N2g when response.success == true AND response.urgency == "Urgent"
-  → N2f when response.success == true AND response.urgency != "Urgent"
-  → N8  when the call fails or returns no claim_id
+TRANSITIONS — match on response.result with EXACT string equality:
+  → N2g when response.result == "urgent"
+  → N2f when response.result == "standard"
+  → N2x otherwise (the else branch = the backend did not answer)
 
 REMINDER: branch on the urgency in the RESPONSE, not the one you sent.
 
@@ -502,9 +507,10 @@ N3a — CHECK STATUS             [Function node → check_status]
 -------------------------------------------------------------------------------
 Sends: action = "check_status" (EXACT), claim_id = {{claim_id}}
 
-TRANSITIONS:
-  → N3b when response.found == true
-  → N3c when response.found == false
+TRANSITIONS — match on response.result with EXACT string equality:
+  → N3b when response.result == "found"
+  → N3c when response.result == "not_found"
+  → N2x otherwise (the else branch = the backend did not answer)
 
 -------------------------------------------------------------------------------
 N3b — STATUS FOUND             [Conversation node]
@@ -554,6 +560,38 @@ TRANSITIONS:
 ===============================================================================
 SHARED NODES
 ===============================================================================
+
+-------------------------------------------------------------------------------
+N2x — RECORDS SYSTEM UNAVAILABLE   [Conversation node]
+Reached from the ELSE branch of ANY of the three function nodes.
+-------------------------------------------------------------------------------
+INSTRUCTION:
+  The lookup did not come back. This is a system problem on our side, NOT a
+  problem with anything the caller told you.
+
+  Say something like: "I'm sorry — I'm having trouble pulling up our records
+  right now. That's on our end, not anything you've done."
+
+  CRITICAL: do NOT tell the caller their policy or claim could not be found,
+  and do NOT ask them to repeat the number. It was almost certainly correct.
+  Telling them it is wrong sends them hunting for a problem that does not
+  exist — and it hides a real outage behind what looks like caller error.
+
+  Offer, in order: try once more in a moment, or take their details for the
+  claims team to follow up. If they have already retried once, go straight to
+  the handoff rather than looping.
+
+WHY THIS NODE EXISTS:
+  Without it, "the webhook returned nothing" and "the policy genuinely does not
+  exist" land in the same branch, because a missing field fails an equality test
+  exactly like a non-matching one does. The caller then hears "I can't find your
+  policy" during a total backend outage — misleading to them, and it disguises
+  an infrastructure failure as a data problem for whoever is debugging.
+
+TRANSITIONS:
+  → N2  when the caller wants to try again.
+  → N8  when the caller wants a person, or has already retried once.
+  → N9  when the caller wants to end the call.
 
 -------------------------------------------------------------------------------
 N8 — HUMAN HANDOFF             [Conversation node — DEMO ONLY]
