@@ -26,14 +26,23 @@ You'll see red warning triangles on the Google Sheets and Gmail nodes. That's
 expected — credentials were intentionally left out of the export so you pick
 your own rather than chasing a broken credential reference.
 
-## 2. Set the Sheet ID (one node per workflow)
+## 2. Set the Sheet ID (five nodes)
 
-Each workflow has a **`Config`** node right after its webhook. Open it and
-replace `PASTE_YOUR_GOOGLE_SHEET_ID_HERE` with your real Spreadsheet ID.
+Open each Google Sheets node and replace `PASTE_YOUR_GOOGLE_SHEET_ID_HERE` in
+the **Document** field with your real Spreadsheet ID — three nodes in Workflow A,
+two in Workflow B. Import from `n8n/local/` instead and this is already done.
 
-Every Google Sheets node reads it from there via
-`{{ $('Config').first().json.sheet_id }}` — so this is the only place it needs
-changing. If you ever move to a different sheet, it's one edit, not five.
+> **Keep it a literal ID, never an expression.** It is tempting to hold the ID
+> in one Set node and reference it everywhere as
+> `{{ $('Config').first().json.sheet_id }}`. That breaks the node: n8n populates
+> the **Sheet** and **Column to match on** dropdowns by reading your spreadsheet
+> *while you are editing*, and an expression cannot be resolved at design time —
+> there is no execution data yet. The dropdowns come up empty, the column value
+> is silently dropped, and at runtime you get `The column "" could not be found`,
+> which points at a column when the real cause is the document field.
+>
+> This project shipped the Set-node version first and hit exactly that. Five
+> literal values beat one clever reference.
 
 ## 3. Attach credentials
 
@@ -145,7 +154,6 @@ analytics row.
 
 ```
 Webhook (POST, responseMode = responseNode)
-  → Config              set sheet_id once
   → Normalize Request   flatten Retell's {args:{…}} wrapper; repair POL-/CLM- formats
   → Switch on action
        ├─ validate_policy → Lookup Policy (Policies)  → Build Validate Response → Respond
@@ -173,7 +181,6 @@ synchronous workflow, a path with no Respond node is a hung phone call.
 
 ```
 Webhook (POST, responds immediately)
-  → Config
   → Flatten Retell Payload      call.call_analysis.custom_analysis_data → flat fields
   → IF claim_filed == true
        ├─ true  → Gmail: send confirmation → Analytics: log row (claim_filed = true)
@@ -202,6 +209,7 @@ reaches back to a specific earlier node's data.
 | Retell function times out | Workflow not Published, or Test URL in use | Publish; use the `/webhook/` URL |
 | Works once then stops | Test URL | Same as above |
 | Appended rows are blank | Sheet headers don't match | Headers must match `data/Claims-Template.csv` exactly |
+| `The column "" could not be found` | The Document field holds an expression, so the column dropdown never loaded | Put a literal Sheet ID in the Document field, then re-pick the Sheet and the Column to match on |
 | `check_status` always "not found" | Claim ID formatting | Normalize node pads to 6 digits; check the sheet stores `CLM-000001`, not `1` |
 | Execution green but no reply reached the agent | Branch has no Respond node | Every Switch output needs one |
 | No execution appears at all | Wrong URL, or workflow unpublished | Compare against the Webhook node's Production URL |

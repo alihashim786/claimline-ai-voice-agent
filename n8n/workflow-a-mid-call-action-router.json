@@ -20,32 +20,7 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "cfg-sheet-id",
-              "name": "sheet_id",
-              "value": "PASTE_YOUR_GOOGLE_SHEET_ID_HERE",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "id": "a1000000-0000-4000-8000-000000000002",
-      "name": "Config",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -900,
-        340
-      ],
-      "notes": "EDIT ME: paste EITHER the bare Sheet ID (1AbC...) OR the full https://docs.google.com/spreadsheets/d/.../edit URL - the Google Sheets nodes extract the ID from whichever you give them."
-    },
-    {
-      "parameters": {
-        "jsCode": "// ---------------------------------------------------------------\n// Normalize the request coming from Retell.\n//\n// Retell can deliver a Custom Function payload in more than one shape\n// depending on how the Function node is configured:\n//   { \"args\": { ... }, \"name\": \"...\", \"call\": { ... } }   <- most common\n//   { ... fields at top level ... }                          <- raw body mode\n// n8n additionally wraps the HTTP body in `body`.\n// We flatten all of that here ONCE so every node downstream can just\n// use $json.action, $json.policy_number, etc.\n//\n// We also repair the two identifiers that a speech-to-text engine is\n// most likely to mangle:\n//   \"pol one oh two three four\" / \"POL 10234\" / \"pol-10234\" -> POL-10234\n//   \"claim 42\" / \"CLM 42\"                                   -> CLM-000042\n// Doing this server-side means the agent never has to be perfect.\n// ---------------------------------------------------------------\n\nconst raw = $json.body ?? $json;\nconst a = raw.args ?? raw;\n\nconst str = (v) => (v === undefined || v === null ? '' : String(v).trim());\nconst digitsOnly = (v) => str(v).replace(/\\D/g, '');\n\nfunction normalisePolicy(v) {\n  const d = digitsOnly(v);\n  return d ? `POL-${d}` : '';\n}\n\nfunction normaliseClaim(v) {\n  const d = digitsOnly(v);\n  return d ? `CLM-${d.padStart(6, '0')}` : '';\n}\n\nreturn [\n  {\n    json: {\n      sheet_id: $json.sheet_id,\n      action: str(a.action).toLowerCase(),\n      policy_number: normalisePolicy(a.policy_number),\n      claim_id: normaliseClaim(a.claim_id),\n      holder_name: str(a.holder_name || a.name),\n      incident_type: str(a.incident_type),\n      incident_date: str(a.incident_date),\n      description: str(a.description),\n      email: str(a.email).toLowerCase(),\n      urgency_hint: str(a.urgency),\n      raw_policy_number: str(a.policy_number),\n      raw_claim_id: str(a.claim_id)\n    }\n  }\n];"
+        "jsCode": "// ---------------------------------------------------------------\n// Normalize the request coming from Retell.\n//\n// Retell can deliver a Custom Function payload in more than one shape\n// depending on how the Function node is configured:\n//   { \"args\": { ... }, \"name\": \"...\", \"call\": { ... } }   <- most common\n//   { ... fields at top level ... }                          <- raw body mode\n// n8n additionally wraps the HTTP body in `body`.\n// We flatten all of that here ONCE so every node downstream can just\n// use $json.action, $json.policy_number, etc.\n//\n// We also repair the two identifiers that a speech-to-text engine is\n// most likely to mangle:\n//   \"pol one oh two three four\" / \"POL 10234\" / \"pol-10234\" -> POL-10234\n//   \"claim 42\" / \"CLM 42\"                                   -> CLM-000042\n// Doing this server-side means the agent never has to be perfect.\n// ---------------------------------------------------------------\n\nconst raw = $json.body ?? $json;\nconst a = raw.args ?? raw;\n\nconst str = (v) => (v === undefined || v === null ? '' : String(v).trim());\nconst digitsOnly = (v) => str(v).replace(/\\D/g, '');\n\nfunction normalisePolicy(v) {\n  const d = digitsOnly(v);\n  return d ? `POL-${d}` : '';\n}\n\nfunction normaliseClaim(v) {\n  const d = digitsOnly(v);\n  return d ? `CLM-${d.padStart(6, '0')}` : '';\n}\n\nreturn [\n  {\n    json: {\n      action: str(a.action).toLowerCase(),\n      policy_number: normalisePolicy(a.policy_number),\n      claim_id: normaliseClaim(a.claim_id),\n      holder_name: str(a.holder_name || a.name),\n      incident_type: str(a.incident_type),\n      incident_date: str(a.incident_date),\n      description: str(a.description),\n      email: str(a.email).toLowerCase(),\n      urgency_hint: str(a.urgency),\n      raw_policy_number: str(a.policy_number),\n      raw_claim_id: str(a.claim_id)\n    }\n  }\n];"
       },
       "id": "a1000000-0000-4000-8000-000000000003",
       "name": "Normalize Request",
@@ -153,7 +128,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID_HERE",
           "mode": "id"
         },
         "sheetName": {
@@ -180,7 +155,7 @@
         40
       ],
       "alwaysOutputData": true,
-      "notes": "Always Output Data is ON. Without it, a policy number that matches nothing returns zero items, the branch stops dead, no Respond node ever fires, and the caller sits in silence until Retell times out."
+      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
     },
     {
       "parameters": {
@@ -228,7 +203,7 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID_HERE",
           "mode": "id"
         },
         "sheetName": {
@@ -355,7 +330,8 @@
       "position": [
         60,
         340
-      ]
+      ],
+      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
     },
     {
       "parameters": {
@@ -389,7 +365,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "={{ ($('Config').first().json.sheet_id.match(/[-\\w]{25,}/) || [$('Config').first().json.sheet_id])[0] }}",
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID_HERE",
           "mode": "id"
         },
         "sheetName": {
@@ -416,7 +392,7 @@
         640
       ],
       "alwaysOutputData": true,
-      "notes": "Always Output Data is ON so a fake claim ID still produces one (empty) item and the not-found response can be built and returned."
+      "notes": "EDIT ME: replace the document ID with your own ClaimLine-Data Sheet ID. Keep it a literal value, NOT an expression - n8n needs a concrete ID to populate the Sheet and Column dropdowns while you are editing."
     },
     {
       "parameters": {
@@ -465,17 +441,6 @@
   ],
   "connections": {
     "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Config",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Config": {
       "main": [
         [
           {
