@@ -105,8 +105,8 @@ Build in this order — each step produces something the next one needs.
 ### 1. Google Sheets → [`docs/google-sheets-setup.md`](docs/google-sheets-setup.md)
 Create the `ClaimLine-Data` spreadsheet with `Policies`, `Claims` and `Analytics` tabs, import the three CSVs from `data/`, and create a **read-only** service account for the dashboard. Produces: a **Spreadsheet ID**.
 
-### 2. n8n → [`docs/n8n-setup-guide.md`](docs/n8n-setup-guide.md)
-Import both JSON files, set the Sheet ID in each workflow's `Config` node, attach Google Sheets + Gmail credentials, and **Publish**. Test all three branches with `curl` before Retell exists. Produces: **two production webhook URLs**.
+### 2. n8n → [`docs/n8n-walkthrough.md`](docs/n8n-walkthrough.md)
+Import both JSON files, attach Google Sheets + Gmail credentials, test every branch **inside the n8n editor** using pinned data, and **Publish**. Produces: **two production webhook URLs**. [`docs/n8n-setup-guide.md`](docs/n8n-setup-guide.md) covers the same ground as reference material, including `curl` tests and how each workflow is put together.
 
 ### 3. Retell → [`docs/retell-setup-guide.md`](docs/retell-setup-guide.md)
 Upload the Knowledge Base, create a Conversation Flow agent, paste [`prompts/conductor-prompt.txt`](prompts/conductor-prompt.txt) into Conductor, wire the three function nodes to Workflow A's URL, configure Post-Call Data Extraction, point the `call_analyzed` webhook at Workflow B, and publish. Produces: the **agent ID**.
